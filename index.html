@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Simple GitHub Page — Dropdown + Text Entry</title>
+  <meta name="description" content="Two-item dropdown and text entry box example for GitHub Pages" />
+
+  <style>
+    :root{
+      --bg:#0f1724;
+      --card:#0b1220;
+      --muted:#94a3b8;
+      --accent:#60a5fa;
+      --surface:#111827;
+      --radius:12px;
+      --glass: rgba(255,255,255,0.03);
+    }
+
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background: linear-gradient(180deg, #071022 0%, #071827 100%);
+      color: #E6EEF6;
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:32px;
+    }
+
+    .card{
+      width:100%;
+      max-width:720px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border-radius:var(--radius);
+      padding:28px;
+      box-shadow: 0 6px 24px rgba(2,6,23,0.6);
+      border: 1px solid rgba(255,255,255,0.03);
+    }
+
+    h1{
+      margin:0 0 8px 0;
+      font-size:20px;
+      letter-spacing:-0.2px;
+    }
+    p.lead{
+      margin:0 0 20px 0;
+      color:var(--muted);
+      font-size:13px;
+    }
+
+    .row{
+      display:flex;
+      gap:20px;
+      align-items:flex-start;
+      flex-wrap:wrap;
+    }
+
+    /* Dropdown styles */
+    .dropdown {
+      position: relative;
+      width:260px;
+    }
+
+    .dropdown-toggle{
+      width:100%;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:10px 12px;
+      background: var(--glass);
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,0.03);
+      cursor:pointer;
+      user-select:none;
+      color:inherit;
+      font-size:14px;
+    }
+    .dropdown-toggle:focus{
+      outline: 3px solid rgba(96,165,250,0.16);
+      outline-offset:2px;
+    }
+
+    .caret{
+      display:inline-block;
+      transform-origin:center;
+      transition: transform .18s ease;
+    }
+    .dropdown.open .caret{ transform: rotate(180deg); }
+
+    .menu{
+      position:absolute;
+      top:calc(100% + 8px);
+      left:0;
+      width:100%;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,0.03);
+      box-shadow: 0 12px 28px rgba(2,6,23,0.6);
+      padding:6px;
+      z-index:30;
+    }
+
+    .menu button{
+      width:100%;
+      text-align:left;
+      background:transparent;
+      border:none;
+      padding:10px 12px;
+      border-radius:8px;
+      cursor:pointer;
+      color:inherit;
+      font-size:14px;
+    }
+    .menu button:hover,
+    .menu button[aria-selected="true"],
+    .menu button:focus{
+      background: rgba(96,165,250,0.08);
+      outline:none;
+    }
+
+    /* Text entry */
+    .text-area{
+      flex:1 1 360px;
+      min-width:220px;
+    }
+
+    label{
+      display:block;
+      font-size:13px;
+      margin-bottom:8px;
+      color:var(--muted);
+    }
+
+    textarea{
+      width:100%;
+      min-height:120px;
+      resize:vertical;
+      padding:12px;
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,0.03);
+      background: rgba(255,255,255,0.015);
+      color:inherit;
+      font-size:14px;
+      line-height:1.4;
+    }
+    textarea:focus{
+      outline:3px solid rgba(96,165,250,0.12);
+      outline-offset:2px;
+    }
+
+    .hint{
+      margin-top:8px;
+      font-size:12px;
+      color:var(--muted);
+    }
+
+    /* small responsive */
+    @media (max-width:640px){
+      .row{flex-direction:column}
+      .dropdown{width:100%}
+    }
+  </style>
+</head>
+<body>
+  <main class="card" role="main" aria-labelledby="pageTitle">
+    <h1 id="pageTitle">Example: Two-item dropdown + text entry</h1>
+    <p class="lead">A lightweight, accessible layout ready for GitHub Pages. Replace the items or wire the values into your form handling.</p>
+
+    <form id="demoForm" onsubmit="event.preventDefault(); handleSubmit();">
+      <div class="row" style="align-items:start;">
+        <!-- Dropdown -->
+        <div class="dropdown" id="customDropdown" data-open="false">
+          <label id="dropdownLabel" for="dropdownToggle">Choose an option</label>
+
+          <!-- Toggle button (acts like a combobox) -->
+          <div
+            id="dropdownToggle"
+            class="dropdown-toggle"
+            role="combobox"
+            aria-haspopup="listbox"
+            aria-expanded="false"
+            aria-labelledby="dropdownLabel dropdownValue"
+            tabindex="0"
+          >
+            <span id="dropdownValue">Select an option</span>
+            <svg class="caret" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+
+          <!-- Hidden native input to hold the chosen value for easy form submission if you prefer -->
+          <input type="hidden" name="selectedOption" id="selectedOptionInput" value="">
+
+          <!-- Menu -->
+          <div class="menu" role="listbox" aria-labelledby="dropdownLabel" tabindex="-1" hidden>
+            <button type="button" role="option" data-value="optionA" id="optA" aria-selected="false">Option A</button>
+            <button type="button" role="option" data-value="optionB" id="optB" aria-selected="false">Option B</button>
+          </div>
+        </div>
+
+        <!-- Text entry -->
+        <div class="text-area">
+          <label for="notes">Notes</label>
+          <textarea id="notes" name="notes" placeholder="Enter text here..."></textarea>
+          <div class="hint" id="charCount">0 characters</div>
+        </div>
+      </div>
+
+      <div style="margin-top:18px; display:flex; gap:8px;">
+        <button type="submit" style="padding:10px 14px; border-radius:10px; border:none; cursor:pointer; background:var(--accent); color:#03203a; font-weight:600;">Save</button>
+        <button type="button" onclick="resetForm()" style="padding:10px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.04); background:transparent; color:var(--muted); cursor:pointer;">Reset</button>
+      </div>
+    </form>
+  </main>
+
+  <script>
+    // Elements
+    const dropdown = document.getElementById('customDropdown');
+    const toggle = document.getElementById('dropdownToggle');
+    const menu = dropdown.querySelector('.menu');
+    const options = Array.from(menu.querySelectorAll('[role="option"]'));
+    const hiddenInput = document.getElementById('selectedOptionInput');
+    const dropdownValue = document.getElementById('dropdownValue');
+
+    // Text area char count
+    const notes = document.getElementById('notes');
+    const charCount = document.getElementById('charCount');
+
+    // Utility
+    function openDropdown(){
+      dropdown.classList.add('open');
+      toggle.setAttribute('aria-expanded','true');
+      menu.hidden = false;
+      menu.focus();
+      dropdown.dataset.open = 'true';
+      // set first option focus for keyboard users
+      focusOption(0);
+    }
+    function closeDropdown(){
+      dropdown.classList.remove('open');
+      toggle.setAttribute('aria-expanded','false');
+      menu.hidden = true;
+      dropdown.dataset.open = 'false';
+      toggle.focus();
+    }
+
+    function toggleDropdown(){
+      if (dropdown.dataset.open === 'true') closeDropdown();
+      else openDropdown();
+    }
+
+    // Keyboard navigation in menu
+    let focusedIndex = -1;
+    function focusOption(index){
+      if (index < 0) index = 0;
+      if (index >= options.length) index = options.length - 1;
+      focusedIndex = index;
+      options.forEach((opt, i) => {
+        if (i === index){
+          opt.focus();
+          opt.setAttribute('tabindex','0');
+        } else {
+          opt.setAttribute('tabindex','-1');
+        }
+      });
+    }
+
+    // Click handlers for options
+    options.forEach((opt, i) => {
+      opt.addEventListener('click', () => {
+        selectOption(opt);
+        closeDropdown();
+      });
+
+      opt.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown'){
+          e.preventDefault();
+          focusOption(i + 1);
+        } else if (e.key === 'ArrowUp'){
+          e.preventDefault();
+          focusOption(i - 1);
+        } else if (e.key === 'Enter' || e.key === ' '){
+          e.preventDefault();
+          selectOption(opt);
+          closeDropdown();
+        } else if (e.key === 'Escape'){
+          e.preventDefault();
+          closeDropdown();
+        }
+      });
+    });
+
+    function selectOption(button){
+      const value = button.dataset.value;
+      const label = button.textContent.trim();
+      // update UI
+      dropdownValue.textContent = label;
+      hiddenInput.value = value;
+      options.forEach(o => o.setAttribute('aria-selected', 'false'));
+      button.setAttribute('aria-selected', 'true');
+    }
+
+    // Toggle behaviors
+    toggle.addEventListener('click', toggleDropdown);
+    toggle.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' '){
+        e.preventDefault();
+        toggleDropdown();
+      } else if (e.key === 'ArrowDown'){
+        e.preventDefault();
+        openDropdown();
+      }
+    });
+
+    // Close when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!dropdown.contains(e.target)) closeDropdown();
+    });
+
+    // Close when focus moves away
+    document.addEventListener('focusin', (e) => {
+      if (!dropdown.contains(e.target)) {
+        // small delay to allow clicks inside to register
+        setTimeout(() => {
+          if (!dropdown.contains(document.activeElement)) closeDropdown();
+        }, 10);
+      }
+    });
+
+    // Textarea char count
+    notes.addEventListener('input', () => {
+      charCount.textContent = notes.value.length + ' characters';
+    });
+
+    function handleSubmit(){
+      // For demo: show form values in console — replace with your own handling (fetch, form submit, etc.)
+      const formData = new FormData(document.getElementById('demoForm'));
+      const obj = Object.fromEntries(formData.entries());
+      // simple validation demonstration
+      if (!obj.selectedOption) {
+        alert('Please select an option from the dropdown.');
+        return;
+      }
+      console.log('Form submitted', obj);
+      alert('Saved — check console (or wire this to your backend).');
+    }
+
+    function resetForm(){
+      hiddenInput.value = '';
+      dropdownValue.textContent = 'Select an option';
+      options.forEach(o => o.setAttribute('aria-selected','false'));
+      notes.value = '';
+      charCount.textContent = '0 characters';
+    }
+
+    // Initialize: make options tabbable for accessibility
+    options.forEach((o) => o.setAttribute('tabindex','-1'));
+  </script>
+</body>
+</html>
