@@ -3,7 +3,7 @@ pickle
 tabulate
 edinet_tools
 os
-pandas as pd
+pandas
 dotenv
 rich.pretty
 feedparser
