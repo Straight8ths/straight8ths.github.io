@@ -1,0 +1,15 @@
+pathlib
+pickle
+tabulate
+edinet_tools
+os
+pandas as pd
+dotenv
+rich.pretty
+feedparser
+pandas
+time
+datetime
+requests
+deepl
+pathlib
