@@ -19,28 +19,24 @@ import gunicorn
 
 app = Flask(__name__)
 
-@app.route("/")
-def directory_setup():
-    # Define base directory
-    BASE_DIR = Path(__file__).resolve().parent
+# Define base directory
+BASE_DIR = Path(__file__).resolve().parent
 
-    # Create data directory
-    EDINET_DATA_ROOT = Path(os.environ.get("EDINET_DATA_ROOT", BASE_DIR / "EDINET_data"))
-    EDINET_DATA_ROOT.mkdir(exist_ok=True)
+# Create data directory
+EDINET_DATA_ROOT = Path(os.environ.get("EDINET_DATA_ROOT", BASE_DIR / "EDINET_data"))
+EDINET_DATA_ROOT.mkdir(exist_ok=True)
 
-    # Create cache directory and file path
-    EDINET_CACHE_DIR = EDINET_DATA_ROOT / "EDINET_cache"
-    EDINET_CACHE_DIR.mkdir(exist_ok=True)
-    CACHE_FILE = EDINET_CACHE_DIR / "data_cache.pkl"
+# Create cache directory and file path
+EDINET_CACHE_DIR = EDINET_DATA_ROOT / "EDINET_cache"
+EDINET_CACHE_DIR.mkdir(exist_ok=True)
+CACHE_FILE = EDINET_CACHE_DIR / "data_cache.pkl"
 
-    # Create reports directory
-    EDINET_REPORTS_PATH = EDINET_DATA_ROOT / "EDINET_reports"
-    EDINET_REPORTS_PATH.mkdir(exist_ok=True)
+# Create reports directory
+EDINET_REPORTS_PATH = EDINET_DATA_ROOT / "EDINET_reports"
+EDINET_REPORTS_PATH.mkdir(exist_ok=True)
 
 def edinet_extractor(mode: str, ticker: str = None, translate: bool = False):
     """Extract recent EDINET filings for companies in our Google Sheet list."""
-    
-    directory_setup()
 
     # API keys as environment variables
     load_dotenv()
@@ -479,5 +475,5 @@ def rss_downloader(report_feed: str = None, earliest_date = None, translate: boo
         print(f"RSS feed output file for today already exists at {filepath}. Skipping download.")
     return
 
-edinet_extractor(mode="portfolio")
-# edinet_extractor(mode="name_and_comps", ticker="4565")
+
+edinet_extractor(mode="name_and_comps", ticker="5943")
