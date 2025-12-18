@@ -471,4 +471,4 @@ def rss_downloader(report_feed: str = None, earliest_date = None, translate: boo
         print(f"RSS feed output file for today already exists at {filepath}. Skipping download.")
     return
 
-rss_downloader(report_feed="sector_energy_feeds", earliest_date="2025-10-01")
+edinet_extractor(mode="portfolio")
