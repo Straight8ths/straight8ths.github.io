@@ -1,0 +1,474 @@
+from pathlib import Path
+import pickle
+from tabulate import tabulate
+import edinet_tools
+import os
+import pandas as pd
+from dotenv import load_dotenv
+from rich.pretty import pprint
+import gspread
+from google.oauth2.service_account import Credentials
+import json
+import feedparser
+import time
+from datetime import datetime
+import requests
+import deepl
+
+# Define base directory
+BASE_DIR = Path(__file__).resolve().parent
+
+def edinet_extractor(mode: str, ticker: str = None, translate: bool = False):
+    """Extract recent EDINET filings for companies in our Google Sheet list."""
+    
+    # API keys as environment variables
+    load_dotenv()
+    deepl_api_key = os.getenv("DEEPL_API_KEY")
+    edinet_api_key = os.getenv("EDINET_API_KEY")
+    google_api_key = os.getenv("GOOGLE_API_KEY")
+
+    # Initialize DeepL client
+    deepl_client = deepl.DeepLClient(deepl_api_key)
+    
+    # Google Sheets authentication
+    service_account_info = json.loads(google_api_key)
+    credentials = Credentials.from_service_account_info(
+        service_account_info,
+        scopes=["https://www.googleapis.com/auth/spreadsheets"]
+    )
+    gc = gspread.authorize(credentials)
+
+    # Core URLs
+    portfolio_url = "https://docs.google.com/spreadsheets/d/1oiqGL-ijryNwwpIFhwkimNM24plQOqgSJC-36q08MP4"
+    topix_url = "https://docs.google.com/spreadsheets/d/1gNHw3SUdScw10vHJicuypg6p_-U2qzMvnbqi133wLPI"
+
+    # Pandas settings
+    pd.set_option("mode.copy_on_write", True)
+
+    # Initialize EDINET client
+    client = edinet_tools.EdinetClient()
+
+    # Documents by docType code and name
+    doc_list = client.get_document_types()
+
+    # Create data directory
+    EDINET_DATA_ROOT = Path(os.environ.get("EDINET_DATA_ROOT", BASE_DIR / "EDINET_data"))
+    EDINET_DATA_ROOT.mkdir(exist_ok=True)
+
+    # Create cache directory and file path
+    EDINET_CACHE_DIR = EDINET_DATA_ROOT / "EDINET_cache"
+    EDINET_CACHE_DIR.mkdir(exist_ok=True)
+    CACHE_FILE = EDINET_CACHE_DIR / "data_cache.pkl"
+
+    # Create reports directory
+    EDINET_REPORTS_PATH = EDINET_DATA_ROOT / "EDINET_reports"
+    EDINET_REPORTS_PATH.mkdir(exist_ok=True)
+
+    def fetch_data():
+        all_filings_df = pd.DataFrame(client.get_recent_filings(days_back=30))
+        all_filings_df["secCode"] = all_filings_df["secCode"].astype(str).str[:4]
+        return all_filings_df
+
+    if CACHE_FILE.exists():
+        print("\nLoading data from cache...")
+        with open(CACHE_FILE, "rb") as f:
+            all_filings_df = pickle.load(f)
+    else:
+        print("\nCache not found. Fetching new data...")
+        all_filings_df = fetch_data()
+        with open(CACHE_FILE, "wb") as f:
+            pickle.dump(all_filings_df, f)
+
+    # Load portfolio data from Google Sheets into a dataframe
+    portfolio_sheet = gc.open_by_url(portfolio_url).sheet1
+    portfolio_data = portfolio_sheet.get_all_values()
+    portfolio_df = (
+    pd.DataFrame(portfolio_data[1:], columns=portfolio_data[0])
+      .iloc[:, 1:]
+      .reset_index(drop=True))
+    
+    # Edit the portfolio dataframe
+    portfolio_df.drop(["Weight"], axis=1, inplace=True)
+    portfolio_df["Ticker"] = portfolio_df["Ticker"].str[:4]
+    portfolio_df.insert(2, "EDINET_ID", portfolio_df["Ticker"].apply(client._resolve_company_identifier))
+    
+    # Load TOPIX data from Google Sheets into a dataframe
+    topix_sheet = gc.open_by_url(topix_url).sheet1
+    topix_data = topix_sheet.get_all_values()
+    topix_df = (
+    pd.DataFrame(topix_data[1:], columns=topix_data[0])
+      .iloc[:, 1:]
+      .reset_index(drop=True))
+
+    def filter_filings(reference_dataframe):
+        filtered_filings_df = all_filings_df[all_filings_df["edinetCode"].isin(reference_dataframe["EDINET_ID"])]
+        filtered_filings_df["docType"] = filtered_filings_df["docTypeCode"].map(doc_list)
+        filtered_filings_df["Name"] = filtered_filings_df["secCode"].map(topix_df.set_index("Code")["Issue"])
+        filtered_filings_df.reset_index(drop=True, inplace=True)
+        filtered_filings_df = filtered_filings_df[["Name", "secCode", "edinetCode", "submitDateTime", "docTypeCode", "docType", "docID"]]
+        filtered_filings_df = filtered_filings_df.sort_values(by=["Name", "submitDateTime"], ascending=[True, False]).reset_index(drop=True)
+        return filtered_filings_df
+        
+
+    if mode == "portfolio":
+        filtered_filings_df = filter_filings(portfolio_df)
+        print("\nList of filings for the given companies:")
+        print("------------------------------------")
+        print(filtered_filings_df)
+
+    if mode == "name_and_comps" and ticker is not None and ticker in portfolio_df["Ticker"].values:
+
+        # Get competitors for the given ticker
+        comps = portfolio_df.loc[portfolio_df["Ticker"] == ticker, "Competitors":].values.flatten().tolist()
+        comps = [comp for comp in comps if len(comp) > 0 and " JP" in comp]
+        comps = [comp[:4] for comp in comps]
+        name_and_comps = [ticker] + comps
+        name_and_comps = pd.DataFrame(name_and_comps, columns=["Ticker"])
+        name_and_comps["EDINET_ID"] = name_and_comps["Ticker"].apply(client._resolve_company_identifier)
+
+        filtered_filings_df = filter_filings(name_and_comps)
+        print("\nList of filings for the given company and competitors:")
+        print("--------------------------------------------------------")
+        print(filtered_filings_df)
+
+    # If EDINET_reports is empty, download all reports and extract text blocks
+    if len(os.listdir(EDINET_REPORTS_PATH)) == 0:
+        print("\nEDINET_reports folder is empty. Downloading all reports...")
+        print("====================================")
+        error_reports = []
+        for row in filtered_filings_df.itertuples(index=False):
+            docID = row.docID
+            tickercode = row.secCode
+            Name = row.Name.replace(" ", "_")
+            docType = row.docType
+            submitDateTime = row.submitDateTime[:10]
+            print(f"Processing document {docID}...")
+            try:
+                parsed = client.download_filing(docID, extract_data=True, doc_type_code=None)
+                # Send text blocks to a text file
+                with open(os.path.expanduser(f"{EDINET_REPORTS_PATH}/{Name}_[{tickercode}.T]_{submitDateTime}_{docType}_{docID}_text_blocks.txt"), "w", encoding="utf-8") as f:
+                    for block in parsed.get("text_blocks", []):
+                        blockID = block["id"]
+                        title = block["title"]
+                        content = block["content"]
+                        if translate:
+                            title = deepl_client.translate_text(title, target_lang="EN-US")
+                            content = deepl_client.translate_text(content, target_lang="EN-US")
+                        f.write(f"{str(blockID)}\n")
+                        f.write(f"{str(title)}\n")
+                        f.write(f"{str(content)}\n")
+                        f.write("\n")
+                print(f"Saved text blocks from document {docID}.")
+                print("-----------------------------------")
+            except Exception as e:
+                print(f"Error processing document {docID}: {e}")
+                error_reports.append(docID)
+                print("-----------------------------------")
+        if error_reports:
+            print("\nThe following ticker codes and integers represent the number of reports that could not be processed. These are usually reports which are not available in XBRL format. Please check these manually:")
+            print(filtered_filings_df[filtered_filings_df['docID'].isin(error_reports)])
+    else:
+        print("\nEDINET_reports folder is not empty. Skipping download of reports.")
+    return
+
+def rss_downloader(report_feed: str = None, earliest_date = None, translate: bool = False):
+
+    RSS_OUTPUT_PATH = BASE_DIR / "RSS_feed_output"
+    RSS_OUTPUT_PATH.mkdir(exist_ok=True)
+
+    load_dotenv()
+    deepl_api_key = os.getenv("DEEPL_API_KEY")
+    deepl_client = deepl.DeepLClient(deepl_api_key)
+
+
+    macro_english = {
+        "Yomiuri_Business": "https://japannews.yomiuri.co.jp/business/feed/",
+        "Yomiuri_Economy": "https://japannews.yomiuri.co.jp/business/economy/feed",
+        "Yomiuri_Companies": "https://japannews.yomiuri.co.jp/business/companies/feed",
+        "Yomiuri_Markets": "https://japannews.yomiuri.co.jp/business/markets/feed",
+        "Yomiuri_Business_Series": "https://japannews.yomiuri.co.jp/business/business-series/feed",
+        "Yomiuri_YIES": "https://japannews.yomiuri.co.jp/business/yies/feed",
+        "Yomiuri_Asia_Inside_Review": "https://japannews.yomiuri.co.jp/business/asia-inside-review/feed",
+        "Tokyo_Stock_Exchange": "https://www.jpx.co.jp/english/rss/markets_news.xml",
+        "Financial_Services_Agency": "https://www.fsa.go.jp/fsaEnNewsList_rss2.xml"
+    }
+
+    macro_japanese = {
+        "NHK": "https://news.web.nhk/n-data/conf/na/rss/cat5.xml",
+        "Asahi_Business": "https://www.asahi.com/rss/asahi/business.rdf",
+        "METI_Journal": "https://journal.meti.go.jp/feed/",
+        "JETRO": "https://www.jetro.go.jp/rss/japan.xml",
+        "Bank_of_Japan": "https://www.boj.or.jp/rss/statistics.xml",
+        "PR_Times": "https://prtimes.jp/index.rdf",
+    }
+
+    macro_feeds = [macro_english, macro_japanese]
+
+    #------------------------------
+
+    sector_energy_english = {
+        "Global_Energy_Infrastructure": "https://globalenergyinfrastructure.com/rss?feed=news",
+        "Global_Energy_Infrastructure_Japan": "https://globalenergyinfrastructure.com/rss?topic=japan",
+        "J-Power": "https://www.jpower.co.jp/english/erss/enews.xml",
+        "Fuji_Oil": "https://www.fujioil.co.jp/en/rss.xml",
+        "Asia_Corporate_News_Energy_Alternatives": "https://www.acnnewswire.com/rss/sector/Energy_Alternatives_acn.xml",
+        "Asia_Corporate_News_Energy": "https://www.acnnewswire.com/rss/sector/Alternative_Energy_acn.xml",
+        "Asia_Corporate_News_Oil_Gas": "https://www.acnnewswire.com/rss/sector/Oil__Gas_acn.xml"
+    }
+
+    sector_energy_japanese = {
+        "Asahi_Environment_and_Energy": "https://www.asahi.com/rss/asahi/eco.rdf",
+    }
+
+    sector_energy_feeds = [sector_energy_english, sector_energy_japanese]
+
+    #------------------------------
+
+    sector_materials_english = {
+        "Japan_Rubber_Weekly": "https://www.japanrubberweekly.com/feed/",
+        "Asia_Corporate_News_Metals_Mining": "https://www.acnnewswire.com/rss/sector/Metals__Mining_acn.xml",
+        "Asia_Corporate_News_Chemicals": "https://www.acnnewswire.com/rss/sector/Chemicals_Spec.Chem_acn.xml",
+        "Asia_Corporate_News_Manufacturing": "https://www.acnnewswire.com/rss/sector/Manufacturing_acn.xml",
+        "Asia_Corporate_News_Print_Packaging": "https://www.acnnewswire.com/rss/sector/Print__Package_acn.xml",
+        "Asia_Corporate_News_Materials_Nanotech": "https://www.acnnewswire.com/rss/sector/Materials__Nanotech_acn.xml"
+    }
+
+    sector_materials_japanese = {
+        "NIMS_General": "https://www.nims.go.jp/news/newsall.xml",
+        "NIMS_News": "https://www.nims.go.jp/news/news.xml"
+    }
+
+    sector_materials_feeds = [sector_materials_english, sector_materials_japanese]
+
+    #------------------------------
+
+    sector_industrials_english = {
+        "Mitsubishi_Heavy_Industries_News": "https://www.mhi.com/rss/mhi_news.xml",
+        "Mitsubishi_Group_News": "https://www.mhi.com/rss/group_news.xml",
+        "Japan_Industry_News": "https://www.japanindustrynews.com/feed/",
+        "Asia_Corporate_News_Industrials": "https://www.acnnewswire.com/rss/sector/Industrial_acn.xml",
+        "Asia_Corporate_News_Aerospace_Defense": "https://www.acnnewswire.com/rss/sector/Aerospace__Defence_acn.xml",
+        "Asia_Corporate_News_Airlines": "https://www.acnnewswire.com/rss/sector/Airlines_acn.xml",
+        "Asia_Corporate_News_Marine_Offshore": "https://www.acnnewswire.com/rss/sector/Marine__Offshore_acn.xml",
+        "Asia_Corporate_News_EVs_Transportation": "https://www.acnnewswire.com/rss/sector/EVs_Transportation_acn.xml",
+        "Asia_Corporate_News_Logistics": "https://www.acnnewswire.com/rss/sector/Transport__Logistics_acn.xml",
+        "Asia_Corporate_News_Sustainability": "https://www.acnnewswire.com/rss/sector/Sustainablity_acn.xml",
+        "Asia_Corporate_News_Agritech": "https://www.acnnewswire.com/rss/sector/Agritech_acn.xml",
+        "Asia_Corporate_News_Smart_Cities": "https://www.acnnewswire.com/rss/sector/Smart_Cities_acn.xml"
+    }
+
+    sector_industrials_japanese = {
+        "MLIT_Notices": "https://www.mlit.go.jp/important.rdf",
+        "MLIT_News": "https://www.mlit.go.jp/index.rdf",
+    }
+
+    sector_industrials_feeds = [sector_industrials_english, sector_industrials_japanese]
+
+    #------------------------------
+
+    sector_consumer_discretionary_english = {
+        "Asia_Corporate_News_Automotive": "https://www.acnnewswire.com/rss/sector/Automotive_acn.xml",
+        "Asia_Corporate_News_Beauty_Skincare": "https://www.acnnewswire.com/rss/sector/Beauty__Skin_Care_acn.xml",
+        "Asia_Corporate_News_Fashion_Apparel": "https://www.acnnewswire.com/rss/sector/Fashion__Apparel_acn.xml",
+        "Asia_Corporate_News_Travel_Tourism": "https://www.acnnewswire.com/rss/sector/Travel__Tourism_acn.xml",
+        "Asia_Corporate_News_Watches_Jewelry": "https://www.acnnewswire.com/rss/sector/Watches__Jewelry_acn.xml",
+    }
+
+    sector_consumer_discretionary_japanese = {
+    }
+
+    sector_consumer_discretionary_feeds = [sector_consumer_discretionary_english, sector_consumer_discretionary_japanese]
+    #------------------------------
+
+    sector_consumer_staples_english = {
+        "Asia_Corporate_News_Food_Beverage": "https://www.acnnewswire.com/rss/sector/Food__Beverage_acn.xml"
+    }
+    sector_consumer_staples_japanese = {
+    }
+
+    sector_consumer_staples_feeds = [sector_consumer_staples_english, sector_consumer_staples_japanese]
+
+    #------------------------------
+
+    sector_healthcare_english = {
+        "Asia_Corporate_News_Medicine": "https://www.acnnewswire.com/rss/sector/Medicine_acn.xml",
+        "Asia_Corporate_News_Alternative_Medicine": "https://www.acnnewswire.com/rss/sector/Alternative_acn.xml",
+        "Asia_Corporate_News_Biotech": "https://www.acnnewswire.com/rss/sector/BioTech_acn.xml",
+        "Asia_Corporate_News_Clinical_Trials": "https://www.acnnewswire.com/rss/sector/Clinical_Trials_acn.xml",
+        "Asia_Corporate_News_Healthcare_Pharma": "https://www.acnnewswire.com/rss/sector/Healthcare__Pharm_acn.xml",
+        "Asia_Corporate_News_Medtech": "https://www.acnnewswire.com/rss/sector/MedTech_acn.xml"
+    }
+
+    sector_healthcare_japanese = {
+        "MHLW_News": "https://www.mhlw.go.jp/stf/news.rdf",
+        "MHLW_Emergency": "https://www.mhlw.go.jp/stf/kinkyu.rdf",
+        "MHLW_Influenza": "https://www.mhlw.go.jp/rss/inful_news.rdf"
+    }
+
+    sector_healthcare_feeds = [sector_healthcare_english, sector_healthcare_japanese]
+
+    #------------------------------
+
+    sector_financials_english = {
+        "Asian_Development_Bank_News": "https://feeds.feedburner.com/adb_news",
+        "Asian_Development_Bank_Whats_New": "https://feeds.feedburner.com/adb_whatsnew",
+        "Mizuho_News": "https://rss2.www.mizuho-fg.co.jp/rss?site=AQ83RXG5&item=7",
+        "Mizuho_Information": "https://rss2.www.mizuho-fg.co.jp/rss?site=AQ83RXG5&item=8",
+        "Mizuho_Investor_Relations": "https://rss2.www.mizuho-fg.co.jp/rss?site=AQ83RXG5&item=9",
+        "SoftBank_Press_Releases": "https://group.softbank/en/news/press/index.rdf",
+        "SoftBank_Notices": "https://group.softbank/en/news/info/index.rdf",
+        "Asia_Corporate_News_Financials": "https://www.acnnewswire.com/rss/sector/Financial_acn.xml",
+        "Asia_Corporate_News_Banking_Insurance": "https://www.acnnewswire.com/rss/sector/Banking__Insurance_acn.xml",
+        "Asia_Corporate_News_Cards_Payments": "https://www.acnnewswire.com/rss/sector/Cards__Payments_acn.xml",
+        "Asia_Corporate_News_Daily_Finance": "https://www.acnnewswire.com/rss/sector/Daily_Finance_acn.xml",
+        "Asia_Corporate_News_Exchanges_Software": "https://www.acnnewswire.com/rss/sector/Exchanges__Software_acn.xml",
+        "Asia_Corporate_News_FinTech": "https://www.acnnewswire.com/rss/sector/FinTech_acn.xml",
+        "Asia_Corporate_News_Funds_Equities": "https://www.acnnewswire.com/rss/sector/Funds__Equities_acn.xml",
+        "Asia_Corporate_News_Legal_Compliance": "https://www.acnnewswire.com/rss/sector/Legal__Compliance_acn.xml",
+        "Asia_Corporate_News_Private_Equity_Venture_Capital": "https://www.acnnewswire.com/rss/sector/PE_VC__Alternatives_acn.xml",
+        "Asia_Corporate_News_Trade_Finance": "https://www.acnnewswire.com/rss/sector/Trade_Finance_acn.xml"
+    }
+
+    sector_financials_japanese = {
+        "FSA_News": "https://www.fsa.go.jp/sescReportList_rss2.xml",
+        "FSA_Other_News": "https://www.fsa.go.jp/sescOtherList_rss2.xml",
+    }
+
+    sector_financials_feeds = [sector_financials_english, sector_financials_japanese]
+
+    #------------------------------
+
+    sector_information_technology_english = {
+        "The_Bridge": "https://thebridge.jp/en/feed",
+        "Asia_Corporate_News_Technology": "https://www.acnnewswire.com/rss/sector/Technology_acn.xml",
+        "Asia_Corporate_News_Artificial_Intelligence": "https://www.acnnewswire.com/rss/sector/Artificial_Intel_[AI]_acn.xml",
+        "Asia_Corporate_News_Automation": "https://www.acnnewswire.com/rss/sector/Automation_[IoT]_acn.xml",
+        "Asia_Corporate_News_Cybersecurity": "https://www.acnnewswire.com/rss/sector/CyberSecurity_acn.xml",
+        "Asia_Corporate_News_Datacenters_Cloud": "https://www.acnnewswire.com/rss/sector/Datacenter__Cloud_acn.xml",
+        "Asia_Corporate_News_Digitalization": "https://www.acnnewswire.com/rss/sector/Digitalization_acn.xml",
+        "Asia_Corporate_News_Electronics": "https://www.acnnewswire.com/rss/sector/Electronics_acn.xml",
+        "Asia_Corporate_News_Engineering": "https://www.acnnewswire.com/rss/sector/Engineering_acn.xml",
+        "Asia_Corporate_News_Enterprise_IT": "https://www.acnnewswire.com/rss/sector/Enterprise_IT_acn.xml"
+    }
+
+
+    sector_information_technology_japanese = {
+        "Digital_Agency_News": "https://www.digital.go.jp/rss/news.xml",
+    }
+
+    sector_information_technology_feeds = [sector_information_technology_english, sector_information_technology_japanese]
+
+    #------------------------------
+
+    sector_communication_services_english = {
+        "RCR_Wireless": "https://www.rcrwireless.com/feed",
+        "Asia_Corporate_News_Advertising": "https://www.acnnewswire.com/rss/sector/Advertising_acn.xml",
+        "Asia_Corporate_News_Broadcast_Film": "https://www.acnnewswire.com/rss/sector/Broadcast_Film__Sat_acn.xml",
+        "Asia_Corporate_News_Media_Marketing": "https://www.acnnewswire.com/rss/sector/Media__Marketing_acn.xml",
+        "Asia_Corporate_News_Telecoms": "https://www.acnnewswire.com/rss/sector/Telecoms_5G_acn.xml",
+        "Asia_Corporate_News_Wireless": "https://www.acnnewswire.com/rss/sector/Wireless_Apps_acn.xml"
+    }
+
+    sector_communication_services_japanese = {
+    }
+
+    sector_communication_services_feeds = [sector_communication_services_english, sector_communication_services_japanese]
+
+    #------------------------------
+
+    sector_utilities_english = {
+        "Asia_Corporate_News_Water": "https://www.acnnewswire.com/rss/sector/Water_acn.xml"
+    }
+
+    sector_utilities_japanese = {
+    }
+
+    sector_utilities_feeds = [sector_utilities_english, sector_utilities_japanese]
+
+    #-----------------------------
+
+    sector_real_estate_english = {
+        "Real_Estate_Japan": "https://resources.realestate.co.jp/feed/",
+        "Asia_Corporate_News_Real_Estate": "https://www.acnnewswire.com/rss/sector/Real_Estate__REIT_acn.xml"
+    }
+
+    sector_real_estate_japanese = {
+        "Japan_Real_Estate_Investment_Corporation": "https://www.j-re.co.jp/ja_cms/news.xml",
+    }
+
+    sector_real_estate_feeds = [sector_real_estate_english, sector_real_estate_japanese]
+
+    #-----------------------------
+
+    gics_feeds = [
+        sector_energy_feeds,
+        sector_materials_feeds,
+        sector_industrials_feeds,
+        sector_consumer_discretionary_feeds,
+        sector_consumer_staples_feeds,
+        sector_healthcare_feeds,
+        sector_financials_feeds,
+        sector_information_technology_feeds,
+        sector_communication_services_feeds,
+        sector_utilities_feeds,
+        sector_real_estate_feeds
+    ]
+
+    parameter_list = {
+        "macro_feeds": macro_feeds,
+        "sector_energy_feeds": sector_energy_feeds,
+        "sector_materials_feeds": sector_materials_feeds,
+        "sector_industrials_feeds": sector_industrials_feeds,
+        "sector_consumer_discretionary_feeds": sector_consumer_discretionary_feeds,
+        "sector_consumer_staples_feeds": sector_consumer_staples_feeds,
+        "sector_healthcare_feeds": sector_healthcare_feeds,
+        "sector_financials_feeds": sector_financials_feeds,
+        "sector_information_technology_feeds": sector_information_technology_feeds,
+        "sector_communication_services_feeds": sector_communication_services_feeds,
+        "sector_utilities_feeds": sector_utilities_feeds,
+        "sector_real_estate_feeds": sector_real_estate_feeds,
+    }
+    #------------------------------
+
+    # Make a file if one does not exist
+    filepath = RSS_OUTPUT_PATH / f"rss_feed_output_{datetime.now().strftime('%Y%m%d')}.txt"
+
+    report_feed = parameter_list[report_feed]
+
+    # Write out the feed data to a text file, translating where necessary
+    # if filepath is empty or does not exist
+    if not os.path.exists(filepath) or os.path.getsize(filepath) == 0:
+        with open(os.path.expanduser(filepath), "w") as file:
+            for i in report_feed:
+                    for name, url in i.items():
+                        feed = feedparser.parse(url)
+                        file.write(f"Feed: {name.upper()}\n\n")
+                        for entry in feed.entries:
+                            formatted_time = None
+                            if 'published' in entry and entry.published:
+                                formatted_time = time.strftime('%Y-%m-%d', entry.published_parsed)
+                            if 'updated' in entry and entry.updated:
+                                formatted_time = time.strftime('%Y-%m-%d', entry.updated_parsed)
+                            if formatted_time and (formatted_time >= earliest_date):
+                                file.write(f"Published: {formatted_time}\n")
+                                if 'title' in entry and entry.title:
+                                    if i == report_feed[1] and translate: # Japanese feeds
+                                        title = deepl_client.translate_text(entry.title, target_lang="EN-US").text
+                                        file.write(f"Title: {title}\n")
+                                    else:
+                                        file.write(f"Title: {entry.title}\n")
+                                if 'summary' in entry and entry.summary:
+                                    if i == report_feed[1] and translate: # Japanese feeds
+                                        summary = deepl_client.translate_text(entry.summary, target_lang="EN-US").text
+                                        file.write(f"Summary: {summary}\n")
+                                    else:
+                                        file.write(f"Summary: {entry.summary}\n")
+                                if 'link' in entry and entry.link:
+                                    file.write(f"Link: {entry.link}\n")
+                                file.write("\n")
+                        file.write("====================================\n\n")
+    else:
+        print(f"RSS feed output file for today already exists at {filepath}. Skipping download.")
+    return
+
+rss_downloader(report_feed="sector_energy_feeds", earliest_date="2025-10-01")
