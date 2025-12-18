@@ -152,14 +152,25 @@
         
         <div class="controls-section">
             <div class="control-group">
-                <label for="newsFeeds">News Feeds:</label>
-                <select id="newsFeeds">
-                    <option value="">Select a feed...</option>
-                    <option value="tech">Technology News</option>
-                    <option value="business">Business News</option>
-                    <option value="world">World News</option>
-                    <option value="sports">Sports News</option>
-                </select>
+                <label for="newsFeeds">Choose a news type:</label>
+                    <select id="newsFeeds" name="newsFeeds">
+                    <optgroup label="Macro News">
+                        <option value="macro">General Macro</option>
+                    </optgroup>
+                    <optgroup label="Sector News">
+                        <option value="energy">Energy</option>
+                        <option value="materials">Materials</option>
+                        <option value="industrials">Industrials</option>
+                        <option value="consumer_discretionary">Consumer Discretionary</option>
+                        <option value="consumer_staples">Consumer Staples</option>
+                        <option value="healthcare">Healthcare</option>
+                        <option value="financials">Financials</option>
+                        <option value="information_technology">Information Technology</option>
+                        <option value="communication_services">Communication Services</option>
+                        <option value="utilities">Utilities</option>
+                        <option value="real_estate">Real Estate</option>
+                    </optgroup>
+                    </select>
                 <button onclick="collectNews()">Collect News</button>
             </div>
 
