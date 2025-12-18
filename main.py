@@ -474,6 +474,3 @@ def rss_downloader(report_feed: str = None, earliest_date = None, translate: boo
     else:
         print(f"RSS feed output file for today already exists at {filepath}. Skipping download.")
     return
-
-
-edinet_extractor(mode="name_and_comps", ticker="5943")
