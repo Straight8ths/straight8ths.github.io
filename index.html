@@ -148,7 +148,7 @@
 </head>
 <body>
     <div class="container">
-        <h1 style="margin-bottom: 20px; color: #a8c5e8;">News & AI Interface</h1>
+        <h1 style="margin-bottom: 20px; color: #a8c5e8;">Macro, Industry, and Sector Information</h1>
         
         <div class="controls-section">
             <div class="control-group">
@@ -175,14 +175,13 @@
             </div>
 
             <div class="control-group">
-                <label for="reportMode">Select Report Mode:</label>
-                <select id="reportMode">
+                <label for="filingsMode">Select Filings Mode:</label>
+                <select id="filingsMode">
                     <option value="">Select mode...</option>
-                    <option value="summary">Summary</option>
-                    <option value="detailed">Detailed</option>
-                    <option value="analysis">Analysis</option>
+                    <option value="portfolio">Portfolio</option>
+                    <option value="name_and_comps">Single name & competitors</option>
                 </select>
-                <button onclick="collectReports()">Collect Reports</button>
+                <button onclick="collectReports()">Collect Filings</button>
             </div>
         </div>
 
@@ -223,7 +222,7 @@
         }
 
         function collectReports() {
-            const mode = document.getElementById('reportMode').value;
+            const mode = document.getElementById('filingsMode').value;
             if (!mode) {
                 addLog('ERROR: No report mode selected');
                 return;
