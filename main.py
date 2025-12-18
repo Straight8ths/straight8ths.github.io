@@ -20,8 +20,22 @@ import gunicorn
 app = Flask(__name__)
 
 @app.route("/")
-# Define base directory
-BASE_DIR = Path(__file__).resolve().parent
+def directory_setup():
+    # Define base directory
+    BASE_DIR = Path(__file__).resolve().parent
+
+    # Create data directory
+    EDINET_DATA_ROOT = Path(os.environ.get("EDINET_DATA_ROOT", BASE_DIR / "EDINET_data"))
+    EDINET_DATA_ROOT.mkdir(exist_ok=True)
+
+    # Create cache directory and file path
+    EDINET_CACHE_DIR = EDINET_DATA_ROOT / "EDINET_cache"
+    EDINET_CACHE_DIR.mkdir(exist_ok=True)
+    CACHE_FILE = EDINET_CACHE_DIR / "data_cache.pkl"
+
+    # Create reports directory
+    EDINET_REPORTS_PATH = EDINET_DATA_ROOT / "EDINET_reports"
+    EDINET_REPORTS_PATH.mkdir(exist_ok=True)
 
 def edinet_extractor(mode: str, ticker: str = None, translate: bool = False):
     """Extract recent EDINET filings for companies in our Google Sheet list."""
@@ -55,19 +69,6 @@ def edinet_extractor(mode: str, ticker: str = None, translate: bool = False):
 
     # Documents by docType code and name
     doc_list = client.get_document_types()
-
-    # Create data directory
-    EDINET_DATA_ROOT = Path(os.environ.get("EDINET_DATA_ROOT", BASE_DIR / "EDINET_data"))
-    EDINET_DATA_ROOT.mkdir(exist_ok=True)
-
-    # Create cache directory and file path
-    EDINET_CACHE_DIR = EDINET_DATA_ROOT / "EDINET_cache"
-    EDINET_CACHE_DIR.mkdir(exist_ok=True)
-    CACHE_FILE = EDINET_CACHE_DIR / "data_cache.pkl"
-
-    # Create reports directory
-    EDINET_REPORTS_PATH = EDINET_DATA_ROOT / "EDINET_reports"
-    EDINET_REPORTS_PATH.mkdir(exist_ok=True)
 
     def fetch_data():
         all_filings_df = pd.DataFrame(client.get_recent_filings(days_back=30))
