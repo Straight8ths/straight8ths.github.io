@@ -154,6 +154,7 @@
             <div class="control-group">
                 <label for="newsFeeds">Choose a news type:</label>
                     <select id="newsFeeds" name="newsFeeds">
+                    <option value="">Select mode...</option>
                     <optgroup label="Macro News">
                         <option value="macro">General Macro</option>
                     </optgroup>
@@ -171,17 +172,18 @@
                         <option value="real_estate">Real Estate</option>
                     </optgroup>
                     </select>
-                <button onclick="collectNews()">Collect News</button>
+                <button onclick="collectNews()">Collect news</button>
             </div>
 
             <div class="control-group">
-                <label for="filingsMode">Select Filings Mode:</label>
+                <label for="filingsMode">Select filings mode:</label>
                 <select id="filingsMode">
                     <option value="">Select mode...</option>
                     <option value="portfolio">Portfolio</option>
                     <option value="name_and_comps">Single name & competitors</option>
                 </select>
-                <button onclick="collectReports()">Collect Filings</button>
+                <input type="text" id="textbox" placeholder="Enter 4-digit ticker..." disabled style="padding: 8px 12px; border: 1px solid #2d4a6f; border-radius: 4px; background: #1a2f4a; color: #e8f1fa; font-size: 14px;">
+                <button onclick="collectReports()">Collect filings</button>
             </div>
         </div>
 
@@ -201,6 +203,22 @@
     </div>
 
     <script>
+        const dropdown = document.getElementById('filingsMode');
+        const textbox = document.getElementById('textbox');
+        
+        // Values that should enable the text box
+        const enableValues = ['name_and_comps'];
+        
+        dropdown.addEventListener('change', function() {
+            if (enableValues.includes(this.value)) {
+                textbox.disabled = false;
+                textbox.focus();
+            } else {
+                textbox.disabled = true;
+                textbox.value = '';
+            }
+        });
+
         function addLog(message) {
             const logsBox = document.getElementById('logsBox');
             const timestamp = new Date().toLocaleTimeString();
