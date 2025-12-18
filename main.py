@@ -40,6 +40,8 @@ def directory_setup():
 def edinet_extractor(mode: str, ticker: str = None, translate: bool = False):
     """Extract recent EDINET filings for companies in our Google Sheet list."""
     
+    directory_setup()
+
     # API keys as environment variables
     load_dotenv()
     deepl_api_key = os.getenv("DEEPL_API_KEY")
@@ -478,3 +480,4 @@ def rss_downloader(report_feed: str = None, earliest_date = None, translate: boo
     return
 
 edinet_extractor(mode="portfolio")
+# edinet_extractor(mode="name_and_comps", ticker="4565")
