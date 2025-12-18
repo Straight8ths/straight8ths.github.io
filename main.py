@@ -14,7 +14,12 @@ import time
 from datetime import datetime
 import requests
 import deepl
+from flask import Flask
+import gunicorn
 
+app = Flask(__name__)
+
+@app.route("/")
 # Define base directory
 BASE_DIR = Path(__file__).resolve().parent
 

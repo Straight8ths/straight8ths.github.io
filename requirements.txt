@@ -8,3 +8,5 @@ google-auth
 feedparser
 requests
 deepl
+flask
+gunicorn
