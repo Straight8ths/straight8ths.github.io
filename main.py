@@ -15,45 +15,196 @@ from datetime import datetime
 import requests
 import deepl
 from flask import Flask
-import gunicorn
+from pinecone import Pinecone, ServerlessSpec
+import os
+from openai import OpenAI
+from dotenv import load_dotenv
+from rich.pretty import pprint
+import langchain
+from langchain_pinecone import PineconeVectorStore
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_community.document_loaders import DirectoryLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_core.prompts import ChatPromptTemplate
+import hashlib
+from pathlib import Path
+from flask import Flask, jsonify
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 
+### DIRECTORIES SETUP ###
 # Define base directory
 BASE_DIR = Path(__file__).resolve().parent
 
-# Create data directory
+# Create EDINET data directory
 EDINET_DATA_ROOT = Path(os.environ.get("EDINET_DATA_ROOT", BASE_DIR / "EDINET_data"))
 EDINET_DATA_ROOT.mkdir(exist_ok=True)
 
 # Create cache directory and file path
 EDINET_CACHE_DIR = EDINET_DATA_ROOT / "EDINET_cache"
 EDINET_CACHE_DIR.mkdir(exist_ok=True)
-CACHE_FILE = EDINET_CACHE_DIR / "data_cache.pkl"
+cache_file = EDINET_CACHE_DIR / "data_cache.pkl"
 
 # Create reports directory
 EDINET_REPORTS_PATH = EDINET_DATA_ROOT / "EDINET_reports"
 EDINET_REPORTS_PATH.mkdir(exist_ok=True)
 
+### KEYS AND CLIENTS SETUP ###
+# Load environment variables
+load_dotenv()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+deepl_api_key = os.getenv("DEEPL_API_KEY")
+edinet_api_key = os.getenv("EDINET_API_KEY")
+google_api_key = os.getenv("GOOGLE_API_KEY")
+
+# Initialize DeepL client
+deepl_client = deepl.DeepLClient(deepl_api_key)
+
+# Google Sheets authentication
+service_account_info = json.loads(google_api_key)
+credentials = Credentials.from_service_account_info(
+    service_account_info,
+    scopes=["https://www.googleapis.com/auth/spreadsheets"]
+)
+gc = gspread.authorize(credentials)
+
+### VECTOR STORE SETUP ###
+index_name = "example-index"
+
+# Create index if it doesn't exist
+if index_name not in pc.list_indexes().names():
+    pc.create_index(
+        name=index_name,
+        dimension=1536,  # OpenAI text-embedding-3-small
+        metric="cosine",
+        spec=ServerlessSpec(
+            cloud="aws",
+            region="us-east-1"
+        )
+    )
+
+index = pc.Index("example-index")
+    
+splitter = RecursiveCharacterTextSplitter(
+    chunk_size=800,
+    chunk_overlap=100
+)
+
+embeddings = OpenAIEmbeddings(
+    model="text-embedding-3-small"
+)
+
+vectorstore = PineconeVectorStore(
+    index=index,
+    embedding=embeddings
+)
+
+### INGESTION FUNCTIONS ###
+def ingest_document(path: Path):
+    def sha256(text: str) -> str:
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+    def load_text_file(path: Path) -> str:
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+    
+    # 1. Load
+    whole_text = load_text_file(path)
+
+    # 2. Document-level hash
+    doc_hash = sha256(whole_text)
+
+    # 3. Chunk into Document objects
+    docObjects = splitter.create_documents(
+        [whole_text],
+        metadatas=[{
+            "source": str(path),
+            "doc_hash": doc_hash}]
+    )
+
+    # 4. Generate stable IDs (doc + chunk hash)
+    ids = []
+    for doc in docObjects:
+        chunk_hash = sha256(doc.page_content)
+        ids.append(f"{doc_hash}_{chunk_hash}")
+
+    # Check if IDs are already in the index
+    existing_ids = set()
+    batch_size = 100
+    for i in range(0, len(ids), batch_size):
+        id_batch = ids[i:i + batch_size]
+        query_response = index.fetch(ids=id_batch)
+        existing_ids.update(query_response.vectors.keys())
+
+    # Filter out existing documents
+    docObjects = [doc for doc, id_ in zip(docObjects, ids) if id_ not in existing_ids]
+    ids = [id_ for id_ in ids if id_ not in existing_ids]
+
+    pprint(f"Filtered {len(existing_ids)} existing `Document` objects. {len(docObjects)} new `Document` objects to ingest.")
+
+    # 5. Upsert
+    vectorstore.add_documents(
+        documents=docObjects,
+        ids=ids
+    )
+
+def ingest_directory(folder: str):
+    folder_path = Path(folder)
+
+    for path in folder_path.iterdir():
+        if path.suffix.lower() in {".txt", ".md"}:
+            ingest_document(path)
+
+### QUESTION ANSWERING SETUP ###
+def answer_question(question: str):
+    
+    def format_docs(docs):
+        return "\n\n".join(
+            f"[Source: {doc.metadata.get('source')}]\n{doc.page_content}"
+            for doc in docs        )
+
+    llm = ChatOpenAI(
+    model="gpt-4o-mini",  # or gpt-4.1 / gpt-4o
+    temperature=0)
+
+    retriever = vectorstore.as_retriever(
+        search_type="similarity",
+        search_kwargs={"k": 5}    )
+
+    prompt = ChatPromptTemplate.from_messages([
+        (
+            "system",
+            "You are a helpful assistant. Answer the user's question using ONLY the context provided. If the answer is not in the context, say 'I don't know.'"
+        ),
+        (
+            "human",
+            """Context:{context} Question:{question}""")])
+    # 1. Retrieve
+    docs = retriever._get_relevant_documents(question, run_manager=None)
+
+    # 2. Format context
+    context = format_docs(docs)
+
+    # 3. Build prompt
+    messages = prompt.format_messages(
+        context=context,
+        question=question
+    )
+
+    # 4. Call LLM
+    response = llm.invoke(messages)
+    return jsonify({"answer": response.content})
+
+
+
+@app.route('/edinet_extractor', methods=['GET'])
 def edinet_extractor(mode: str, ticker: str = None, translate: bool = False):
     """Extract recent EDINET filings for companies in our Google Sheet list."""
 
-    # API keys as environment variables
-    load_dotenv()
-    deepl_api_key = os.getenv("DEEPL_API_KEY")
-    edinet_api_key = os.getenv("EDINET_API_KEY")
-    google_api_key = os.getenv("GOOGLE_API_KEY")
 
-    # Initialize DeepL client
-    deepl_client = deepl.DeepLClient(deepl_api_key)
-    
-    # Google Sheets authentication
-    service_account_info = json.loads(google_api_key)
-    credentials = Credentials.from_service_account_info(
-        service_account_info,
-        scopes=["https://www.googleapis.com/auth/spreadsheets"]
-    )
-    gc = gspread.authorize(credentials)
 
     # Core URLs
     portfolio_url = "https://docs.google.com/spreadsheets/d/1oiqGL-ijryNwwpIFhwkimNM24plQOqgSJC-36q08MP4"
@@ -73,9 +224,9 @@ def edinet_extractor(mode: str, ticker: str = None, translate: bool = False):
         all_filings_df["secCode"] = all_filings_df["secCode"].astype(str).str[:4]
         return all_filings_df
 
-    if CACHE_FILE.exists():
+    if cache_file.exists():
         print("\nLoading data from cache...")
-        with open(CACHE_FILE, "rb") as f:
+        with open(cache_file, "rb") as f:
             all_filings_df = pickle.load(f)
     else:
         print("\nCache not found. Fetching new data...")
@@ -175,6 +326,7 @@ def edinet_extractor(mode: str, ticker: str = None, translate: bool = False):
         print("\nEDINET_reports folder is not empty. Skipping download of reports.")
     return
 
+@app.route('/rss_downloader', methods=['GET'])
 def rss_downloader(report_feed: str = None, earliest_date = None, translate: bool = False):
 
     RSS_OUTPUT_PATH = BASE_DIR / "RSS_feed_output"
