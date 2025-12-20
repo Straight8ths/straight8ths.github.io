@@ -25,6 +25,7 @@ from langchain_core.prompts import ChatPromptTemplate
 import hashlib
 from flask import Flask, jsonify
 from flask_cors import CORS
+import pdfplumber
 
 app = Flask(__name__)
 CORS(app)
@@ -112,8 +113,15 @@ def ingest_document(path: Path):
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
     def load_text_file(path: Path) -> str:
-        with open(path, "r", encoding="utf-8") as f:
-            return f.read()
+        if Path(path).suffix.lower() == ".pdf":
+            with pdfplumber.open(path) as pdf:
+                text = ""
+                for page in pdf.pages:
+                    text += page.extract_text() + "\n"
+            return text
+        else:
+            with open(path, "r", encoding="utf-8") as f:
+                return f.read()
     
     # 1. Load
     whole_text = load_text_file(path)
@@ -618,13 +626,3 @@ def answer_question(question: str):
 
 # === To view Pinecone index stats, uncomment the following line ===
 # print(index.describe_index_stats())
-
-print(index.describe_index_stats())
-print("--------------------------------\n")
-
-rss_downloader(report_feed="macro_feeds", earliest_date="2024-01-01", translate=False)
-vectorize_RSS_reports()
-print("RSS feeds ingested into vector store.")
-
-print("--------------------------------\n")
-print(index.describe_index_stats())
