@@ -14,12 +14,8 @@ import time
 from datetime import datetime
 import requests
 import deepl
-from flask import Flask
 from pinecone import Pinecone, ServerlessSpec
-import os
 from openai import OpenAI
-from dotenv import load_dotenv
-from rich.pretty import pprint
 import langchain
 from langchain_pinecone import PineconeVectorStore
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
@@ -27,7 +23,6 @@ from langchain_community.document_loaders import DirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.prompts import ChatPromptTemplate
 import hashlib
-from pathlib import Path
 from flask import Flask, jsonify
 from flask_cors import CORS
 
@@ -51,6 +46,10 @@ cache_file = EDINET_CACHE_DIR / "data_cache.pkl"
 EDINET_REPORTS_PATH = EDINET_DATA_ROOT / "EDINET_reports"
 EDINET_REPORTS_PATH.mkdir(exist_ok=True)
 
+# Create RSS feed output directory
+RSS_OUTPUT_PATH = BASE_DIR / "RSS_feed_output"
+RSS_OUTPUT_PATH.mkdir(exist_ok=True)
+
 ### KEYS AND CLIENTS SETUP ###
 # Load environment variables
 load_dotenv()
@@ -59,6 +58,10 @@ pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
 deepl_api_key = os.getenv("DEEPL_API_KEY")
 edinet_api_key = os.getenv("EDINET_API_KEY")
 google_api_key = os.getenv("GOOGLE_API_KEY")
+
+# Initialize EDINET client
+client = edinet_tools.EdinetClient()
+doc_list = client.get_document_types()
 
 # Initialize DeepL client
 deepl_client = deepl.DeepLClient(deepl_api_key)
@@ -87,7 +90,8 @@ if index_name not in pc.list_indexes().names():
     )
 
 index = pc.Index("example-index")
-    
+
+# Select text splitter, embedding model, and vector store
 splitter = RecursiveCharacterTextSplitter(
     chunk_size=800,
     chunk_overlap=100
@@ -102,7 +106,7 @@ vectorstore = PineconeVectorStore(
     embedding=embeddings
 )
 
-### INGESTION FUNCTIONS ###
+### DOCUMENT INGESTION FUNCTIONS ###
 def ingest_document(path: Path):
     def sha256(text: str) -> str:
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -143,8 +147,6 @@ def ingest_document(path: Path):
     docObjects = [doc for doc, id_ in zip(docObjects, ids) if id_ not in existing_ids]
     ids = [id_ for id_ in ids if id_ not in existing_ids]
 
-    pprint(f"Filtered {len(existing_ids)} existing `Document` objects. {len(docObjects)} new `Document` objects to ingest.")
-
     # 5. Upsert
     vectorstore.add_documents(
         documents=docObjects,
@@ -158,53 +160,9 @@ def ingest_directory(folder: str):
         if path.suffix.lower() in {".txt", ".md"}:
             ingest_document(path)
 
-### QUESTION ANSWERING SETUP ###
-def answer_question(question: str):
-    
-    def format_docs(docs):
-        return "\n\n".join(
-            f"[Source: {doc.metadata.get('source')}]\n{doc.page_content}"
-            for doc in docs        )
-
-    llm = ChatOpenAI(
-    model="gpt-4o-mini",  # or gpt-4.1 / gpt-4o
-    temperature=0)
-
-    retriever = vectorstore.as_retriever(
-        search_type="similarity",
-        search_kwargs={"k": 5}    )
-
-    prompt = ChatPromptTemplate.from_messages([
-        (
-            "system",
-            "You are a helpful assistant. Answer the user's question using ONLY the context provided. If the answer is not in the context, say 'I don't know.'"
-        ),
-        (
-            "human",
-            """Context:{context} Question:{question}""")])
-    # 1. Retrieve
-    docs = retriever._get_relevant_documents(question, run_manager=None)
-
-    # 2. Format context
-    context = format_docs(docs)
-
-    # 3. Build prompt
-    messages = prompt.format_messages(
-        context=context,
-        question=question
-    )
-
-    # 4. Call LLM
-    response = llm.invoke(messages)
-    return jsonify({"answer": response.content})
-
-
-
 @app.route('/edinet_extractor', methods=['GET'])
-def edinet_extractor(mode: str, ticker: str = None, translate: bool = False):
+def edinet_extractor(mode: str, ticker: str = None, translate: bool = False) -> None:
     """Extract recent EDINET filings for companies in our Google Sheet list."""
-
-
 
     # Core URLs
     portfolio_url = "https://docs.google.com/spreadsheets/d/1oiqGL-ijryNwwpIFhwkimNM24plQOqgSJC-36q08MP4"
@@ -213,25 +171,17 @@ def edinet_extractor(mode: str, ticker: str = None, translate: bool = False):
     # Pandas settings
     pd.set_option("mode.copy_on_write", True)
 
-    # Initialize EDINET client
-    client = edinet_tools.EdinetClient()
-
-    # Documents by docType code and name
-    doc_list = client.get_document_types()
-
     def fetch_data():
         all_filings_df = pd.DataFrame(client.get_recent_filings(days_back=30))
         all_filings_df["secCode"] = all_filings_df["secCode"].astype(str).str[:4]
         return all_filings_df
 
     if cache_file.exists():
-        print("\nLoading data from cache...")
         with open(cache_file, "rb") as f:
             all_filings_df = pickle.load(f)
     else:
-        print("\nCache not found. Fetching new data...")
         all_filings_df = fetch_data()
-        with open(CACHE_FILE, "wb") as f:
+        with open(cache_file, "wb") as f:
             pickle.dump(all_filings_df, f)
 
     # Load portfolio data from Google Sheets into a dataframe
@@ -267,9 +217,6 @@ def edinet_extractor(mode: str, ticker: str = None, translate: bool = False):
 
     if mode == "portfolio":
         filtered_filings_df = filter_filings(portfolio_df)
-        print("\nList of filings for the given companies:")
-        print("------------------------------------")
-        print(filtered_filings_df)
 
     if mode == "name_and_comps" and ticker is not None and ticker in portfolio_df["Ticker"].values:
 
@@ -282,61 +229,40 @@ def edinet_extractor(mode: str, ticker: str = None, translate: bool = False):
         name_and_comps["EDINET_ID"] = name_and_comps["Ticker"].apply(client._resolve_company_identifier)
 
         filtered_filings_df = filter_filings(name_and_comps)
-        print("\nList of filings for the given company and competitors:")
-        print("--------------------------------------------------------")
-        print(filtered_filings_df)
 
-    # If EDINET_reports is empty, download all reports and extract text blocks
-    if len(os.listdir(EDINET_REPORTS_PATH)) == 0:
-        print("\nEDINET_reports folder is empty. Downloading all reports...")
-        print("====================================")
-        error_reports = []
-        for row in filtered_filings_df.itertuples(index=False):
-            docID = row.docID
-            tickercode = row.secCode
-            Name = row.Name.replace(" ", "_")
-            docType = row.docType
-            submitDateTime = row.submitDateTime[:10]
-            print(f"Processing document {docID}...")
-            try:
-                parsed = client.download_filing(docID, extract_data=True, doc_type_code=None)
-                # Send text blocks to a text file
-                with open(os.path.expanduser(f"{EDINET_REPORTS_PATH}/{Name}_[{tickercode}.T]_{submitDateTime}_{docType}_{docID}_text_blocks.txt"), "w", encoding="utf-8") as f:
-                    for block in parsed.get("text_blocks", []):
-                        blockID = block["id"]
-                        title = block["title"]
-                        content = block["content"]
-                        if translate:
-                            title = deepl_client.translate_text(title, target_lang="EN-US")
-                            content = deepl_client.translate_text(content, target_lang="EN-US")
-                        f.write(f"{str(blockID)}\n")
-                        f.write(f"{str(title)}\n")
-                        f.write(f"{str(content)}\n")
-                        f.write("\n")
-                print(f"Saved text blocks from document {docID}.")
-                print("-----------------------------------")
-            except Exception as e:
-                print(f"Error processing document {docID}: {e}")
-                error_reports.append(docID)
-                print("-----------------------------------")
-        if error_reports:
-            print("\nThe following ticker codes and integers represent the number of reports that could not be processed. These are usually reports which are not available in XBRL format. Please check these manually:")
-            print(filtered_filings_df[filtered_filings_df['docID'].isin(error_reports)])
+    # Download and save filings as text files
+    error_reports = []
+    for row in filtered_filings_df.itertuples(index=False):
+        docID = row.docID
+        tickercode = row.secCode
+        Name = row.Name.replace(" ", "_")
+        docType = row.docType
+        submitDateTime = row.submitDateTime[:10]
+        try:
+            parsed = client.download_filing(docID, extract_data=True, doc_type_code=None)
+            # Send text blocks to a text file
+            with open(os.path.expanduser(f"{EDINET_REPORTS_PATH}/{Name}_[{tickercode}.T]_{submitDateTime}_{docType}_{docID}_text_blocks.txt"), "w", encoding="utf-8") as f:
+                for block in parsed.get("text_blocks", []):
+                    blockID = block["id"]
+                    title = block["title"]
+                    content = block["content"]
+                    if translate:
+                        title = deepl_client.translate_text(title, target_lang="EN-US")
+                        content = deepl_client.translate_text(content, target_lang="EN-US")
+                    f.write(f"{str(blockID)}\n")
+                    f.write(f"{str(title)}\n")
+                    f.write(f"{str(content)}\n")
+                    f.write("\n")
+        except Exception as e:
+            error_reports.append(docID)
     else:
-        print("\nEDINET_reports folder is not empty. Skipping download of reports.")
+        pass
     return
 
+
+
 @app.route('/rss_downloader', methods=['GET'])
-def rss_downloader(report_feed: str = None, earliest_date = None, translate: bool = False):
-
-    RSS_OUTPUT_PATH = BASE_DIR / "RSS_feed_output"
-    RSS_OUTPUT_PATH.mkdir(exist_ok=True)
-
-    load_dotenv()
-    deepl_api_key = os.getenv("DEEPL_API_KEY")
-    deepl_client = deepl.DeepLClient(deepl_api_key)
-
-
+def rss_downloader(report_feed: str = None, earliest_date = None, translate: bool = False) -> None:
     macro_english = {
         "Yomiuri_Business": "https://japannews.yomiuri.co.jp/business/feed/",
         "Yomiuri_Economy": "https://japannews.yomiuri.co.jp/business/economy/feed",
@@ -591,38 +517,114 @@ def rss_downloader(report_feed: str = None, earliest_date = None, translate: boo
 
     report_feed = parameter_list[report_feed]
 
-    # Write out the feed data to a text file, translating where necessary
-    # if filepath is empty or does not exist
-    if not os.path.exists(filepath) or os.path.getsize(filepath) == 0:
-        with open(os.path.expanduser(filepath), "w") as file:
-            for i in report_feed:
-                    for name, url in i.items():
-                        feed = feedparser.parse(url)
-                        file.write(f"Feed: {name.upper()}\n\n")
-                        for entry in feed.entries:
-                            formatted_time = None
-                            if 'published' in entry and entry.published:
-                                formatted_time = time.strftime('%Y-%m-%d', entry.published_parsed)
-                            if 'updated' in entry and entry.updated:
-                                formatted_time = time.strftime('%Y-%m-%d', entry.updated_parsed)
-                            if formatted_time and (formatted_time >= earliest_date):
-                                file.write(f"Published: {formatted_time}\n")
-                                if 'title' in entry and entry.title:
-                                    if i == report_feed[1] and translate: # Japanese feeds
-                                        title = deepl_client.translate_text(entry.title, target_lang="EN-US").text
-                                        file.write(f"Title: {title}\n")
-                                    else:
-                                        file.write(f"Title: {entry.title}\n")
-                                if 'summary' in entry and entry.summary:
-                                    if i == report_feed[1] and translate: # Japanese feeds
-                                        summary = deepl_client.translate_text(entry.summary, target_lang="EN-US").text
-                                        file.write(f"Summary: {summary}\n")
-                                    else:
-                                        file.write(f"Summary: {entry.summary}\n")
-                                if 'link' in entry and entry.link:
-                                    file.write(f"Link: {entry.link}\n")
-                                file.write("\n")
-                        file.write("====================================\n\n")
-    else:
-        print(f"RSS feed output file for today already exists at {filepath}. Skipping download.")
+    # Download RSS feeds and write to file
+    with open(os.path.expanduser(filepath), "w") as file:
+        for i in report_feed:
+                for name, url in i.items():
+                    feed = feedparser.parse(url)
+                    file.write(f"Feed: {name.upper()}\n\n")
+                    for entry in feed.entries:
+                        formatted_time = None
+                        if 'published' in entry and entry.published:
+                            formatted_time = time.strftime('%Y-%m-%d', entry.published_parsed)
+                        if 'updated' in entry and entry.updated:
+                            formatted_time = time.strftime('%Y-%m-%d', entry.updated_parsed)
+                        if formatted_time and (formatted_time >= earliest_date):
+                            file.write(f"Published: {formatted_time}\n")
+                            if 'title' in entry and entry.title:
+                                if i == report_feed[1] and translate: # Japanese feeds
+                                    title = deepl_client.translate_text(entry.title, target_lang="EN-US").text
+                                    file.write(f"Title: {title}\n")
+                                else:
+                                    file.write(f"Title: {entry.title}\n")
+                            if 'summary' in entry and entry.summary:
+                                if i == report_feed[1] and translate: # Japanese feeds
+                                    summary = deepl_client.translate_text(entry.summary, target_lang="EN-US").text
+                                    file.write(f"Summary: {summary}\n")
+                                else:
+                                    file.write(f"Summary: {entry.summary}\n")
+                            if 'link' in entry and entry.link:
+                                file.write(f"Link: {entry.link}\n")
+                            file.write("\n")
+                    file.write("====================================\n\n")
     return
+
+def clear_folder(folder_path: Path):
+    for file in folder_path.iterdir():
+        if file.is_file():
+            file.unlink()
+
+def clear_edinet_reports():
+    """Clear all files in the EDINET reports directory."""
+    clear_folder(EDINET_REPORTS_PATH)
+
+def clear_rss_reports():
+    """Clear all files in the RSS feed output directory."""
+    clear_folder(RSS_OUTPUT_PATH)
+
+def vectorize_EDINET_reports():
+    """Ingest all text files in the EDINET_reports directory into the vector store."""
+    ingest_directory(EDINET_REPORTS_PATH)
+    clear_edinet_reports()
+    
+def vectorize_RSS_reports():
+    """Ingest all text files in the RSS_feed_output directory into the vector store."""
+    ingest_directory(RSS_OUTPUT_PATH)
+    clear_rss_reports()
+
+### QUESTION ANSWERING SETUP ###
+def answer_question(question: str):
+    
+    def format_docs(docs):
+        return "\n\n".join(
+            f"[Source: {doc.metadata.get('source')}]\n{doc.page_content}"
+            for doc in docs        )
+
+    llm = ChatOpenAI(
+    model="gpt-4o-mini",  # or gpt-4.1 / gpt-4o
+    temperature=0)
+
+    retriever = vectorstore.as_retriever(
+        search_type="similarity",
+        search_kwargs={"k": 5}    )
+
+    prompt = ChatPromptTemplate.from_messages([
+        (
+            "system",
+            "You are a helpful assistant. Answer the user's question using ONLY the context provided. If the answer is not in the context, say 'I don't know.'"
+        ),
+        (
+            "human",
+            """Context:{context} Question:{question}""")])
+    # 1. Retrieve
+    docs = retriever._get_relevant_documents(question, run_manager=None)
+
+    # 2. Format context
+    context = format_docs(docs)
+
+    # 3. Build prompt
+    messages = prompt.format_messages(
+        context=context,
+        question=question
+    )
+
+    # 4. Call LLM
+    response = llm.invoke(messages)
+    return response.content
+
+# === To delete the Pinecone index, uncomment the following lines ===
+# pc.delete_index(name=index_name)
+# print("Pinecone index deleted.")
+
+# === To view Pinecone index stats, uncomment the following line ===
+# print(index.describe_index_stats())
+
+print(index.describe_index_stats())
+print("--------------------------------\n")
+
+rss_downloader(report_feed="macro_feeds", earliest_date="2024-01-01", translate=False)
+vectorize_RSS_reports()
+print("RSS feeds ingested into vector store.")
+
+print("--------------------------------\n")
+print(index.describe_index_stats())
