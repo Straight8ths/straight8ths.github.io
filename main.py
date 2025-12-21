@@ -4,7 +4,6 @@ import edinet_tools
 import os
 import pandas as pd
 from dotenv import load_dotenv
-from rich.pretty import pprint
 import gspread
 from google.oauth2.service_account import Credentials
 import json
