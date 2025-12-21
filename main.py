@@ -21,7 +21,7 @@ from langchain_community.document_loaders import DirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.prompts import ChatPromptTemplate
 import hashlib
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import pdfplumber
 import pickle
@@ -171,9 +171,9 @@ def ingest_directory(folder: str):
         if path.suffix.lower() in {".txt", ".md"}:
             ingest_document(path)
 
-@app.route('/download_edinet_reports', methods=['GET'])
-def download_edinet_reports(mode: str, ticker: str = None, translate: bool = False) -> None:
+def edinet_report_downloader(mode: str, ticker: str = None, translate: bool = False) -> None:
     """Extract recent EDINET filings for companies in our Google Sheet list."""
+    data = request.get_json()
 
     # Core URLs
     portfolio_url = "https://docs.google.com/spreadsheets/d/1oiqGL-ijryNwwpIFhwkimNM24plQOqgSJC-36q08MP4"
@@ -200,8 +200,8 @@ def download_edinet_reports(mode: str, ticker: str = None, translate: bool = Fal
     portfolio_data = portfolio_sheet.get_all_values()
     portfolio_df = (
     pd.DataFrame(portfolio_data[1:], columns=portfolio_data[0])
-      .iloc[:, 1:]
-      .reset_index(drop=True))
+    .iloc[:, 1:]
+    .reset_index(drop=True))
     
     # Edit the portfolio dataframe
     portfolio_df.drop(["Weight"], axis=1, inplace=True)
@@ -213,8 +213,8 @@ def download_edinet_reports(mode: str, ticker: str = None, translate: bool = Fal
     topix_data = topix_sheet.get_all_values()
     topix_df = (
     pd.DataFrame(topix_data[1:], columns=topix_data[0])
-      .iloc[:, 1:]
-      .reset_index(drop=True))
+    .iloc[:, 1:]
+    .reset_index(drop=True))
 
     def filter_filings(reference_dataframe):
         filtered_filings_df = all_filings_df[all_filings_df["edinetCode"].isin(reference_dataframe["EDINET_ID"])]
@@ -267,9 +267,8 @@ def download_edinet_reports(mode: str, ticker: str = None, translate: bool = Fal
         except Exception as e:
             error_reports.append(docID)
     return
-
-@app.route('/download_rss_reports', methods=['GET'])
-def download_rss_reports(report_feed: str = None, earliest_date = None, translate: bool = False) -> None:
+    
+def download_rss_reports(report_feed: str = None, cutoff_date = None, translate: bool = False) -> None:
     macro_english = {
         "Yomiuri_Business": "https://japannews.yomiuri.co.jp/business/feed/",
         "Yomiuri_Economy": "https://japannews.yomiuri.co.jp/business/economy/feed",
@@ -475,7 +474,7 @@ def download_rss_reports(report_feed: str = None, earliest_date = None, translat
                             formatted_time = time.strftime('%Y-%m-%d', entry.published_parsed)
                         if 'updated' in entry and entry.updated:
                             formatted_time = time.strftime('%Y-%m-%d', entry.updated_parsed)
-                        if formatted_time and (formatted_time >= earliest_date):
+                        if formatted_time and (formatted_time >= cutoff_date):
                             file.write(f"Published: {formatted_time}\n")
                             if 'title' in entry and entry.title:
                                 if i == report_feed[1] and translate: # Japanese feeds
@@ -500,30 +499,27 @@ def clear_folder(folder_path: Path):
         if file.is_file():
             file.unlink()
 
-@app.route('/clear_edinet_reports', methods=['GET'])
 def clear_edinet_reports():
     """Clear all files in the EDINET reports directory."""
     clear_folder(EDINET_REPORTS_PATH)
 
-@app.route('/clear_rss_reports', methods=['GET'])
 def clear_rss_reports():
     """Clear all files in the RSS feed output directory."""
     clear_folder(RSS_OUTPUT_PATH)
 
-@app.route('/vectorize_edinet_reports', methods=['GET'])
-def vectorize_EDINET_reports():
+
+def vectorize_edinet_reports():
     """Ingest all text files in the EDINET_reports directory into the vector store."""
     ingest_directory(EDINET_REPORTS_PATH)
     clear_edinet_reports()
 
-@app.route('/vectorize_rss_reports', methods=['GET'])
-def vectorize_RSS_reports():
+
+def vectorize_rss_reports():
     """Ingest all text files in the RSS_feed_output directory into the vector store."""
     ingest_directory(RSS_OUTPUT_PATH)
     clear_rss_reports()
 
 ### QUESTION ANSWERING SETUP ###
-@app.route('/answer_question', methods=['GET'])
 def answer_question(question: str):
     
     def format_docs(docs):
@@ -563,12 +559,61 @@ def answer_question(question: str):
     response = llm.invoke(messages)
     return response.content
 
+@app.route('/download_edinet_reports', methods=['POST'])
+def get_edinet_reports():
+    data = request.get_json()
+    mode = data.get("mode", "portfolio")
+    ticker = data.get("ticker", None)
+    translate = data.get("translate", False)
+    edinet_report_downloader(mode=mode, ticker=ticker, translate=translate)
+    return jsonify({"status": "EDINET reports downloaded."})
+
+@app.route('/download_rss_reports', methods=['POST'])
+def get_rss_reports():
+    data = request.get_json()
+    report_feed = data.get("report_feed", "macro_feeds")
+    earliest_date = data.get("earliest_date", "2023-01-01")
+    translate = data.get("translate", False)
+    download_rss_reports(report_feed=report_feed, earliest_date=earliest_date, translate=translate)
+    return jsonify({"status": "RSS reports downloaded."})
+
+@app.route('/clear_edinet_reports', methods=['POST'])
+def clear_edinet_reports_route():
+    """Clear all files in the EDINET reports directory."""
+    clear_edinet_reports()
+    return jsonify({"status": "EDINET reports cleared."})
+
+@app.route('/clear_rss_reports', methods=['POST'])
+def clear_rss_reports_route():
+    """Clear all files in the RSS feed output directory."""
+    clear_rss_reports()
+    return jsonify({"status": "RSS reports cleared."})
+
+@app.route('/vectorize_edinet_reports', methods=['POST'])
+def vectorize_edinet_reports_route():
+    """Ingest all text files in the EDINET_reports directory into the vector store."""
+    vectorize_edinet_reports()
+    return jsonify({"status": "EDINET reports vectorized."})
+
+@app.route('/vectorize_rss_reports', methods=['POST'])
+def vectorize_rss_reports_route():
+    """Ingest all text files in the RSS_feed_output directory into the vector store."""
+    vectorize_rss_reports()
+    return jsonify({"status": "RSS reports vectorized."})
+
+@app.route('/answer_question', methods=['POST'])
+def answer_question_route():
+    data = request.get_json()
+    question = data.get("question", "")
+    answer = answer_question(question)
+    return jsonify({"answer": answer})
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=10000)
+
 # === To delete the Pinecone index, uncomment the following lines ===
 # pc.delete_index(name=index_name)
 # print("Pinecone index deleted.")
 
 # === To view Pinecone index stats, uncomment the following line ===
 # print(index.describe_index_stats())
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)

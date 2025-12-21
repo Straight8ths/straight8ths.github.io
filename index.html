@@ -166,24 +166,30 @@
                     <div class="control-group">
                         <label for="newsFeeds">News type:</label>
                             <select id="newsFeeds" name="newsFeeds">
-                            <option value="">Select news category...</option>
-                            <optgroup label="Macro News">
-                                <option value="macro">General Macro</option>
-                            </optgroup>
-                            <optgroup label="GICS Sector News">
-                                <option value="energy">Energy</option>
-                                <option value="materials">Materials</option>
-                                <option value="industrials">Industrials</option>
-                                <option value="consumer_discretionary">Consumer Discretionary</option>
-                                <option value="consumer_staples">Consumer Staples</option>
-                                <option value="healthcare">Healthcare</option>
-                                <option value="financials">Financials</option>
-                                <option value="information_technology">Information Technology</option>
-                                <option value="communication_services">Communication Services</option>
-                                <option value="utilities">Utilities</option>
-                                <option value="real_estate">Real Estate</option>
-                            </optgroup>
+                                <option value="">Select news category...</option>
+                                    <optgroup label="Macro News">
+                                        <option value="macro">General Macro</option>
+                                    </optgroup>
+                                    <optgroup label="GICS Sector News">
+                                        <option value="energy">Energy</option>
+                                        <option value="materials">Materials</option>
+                                        <option value="industrials">Industrials</option>
+                                        <option value="consumer_discretionary">Consumer Discretionary</option>
+                                        <option value="consumer_staples">Consumer Staples</option>
+                                        <option value="healthcare">Healthcare</option>
+                                        <option value="financials">Financials</option>
+                                        <option value="information_technology">Information Technology</option>
+                                        <option value="communication_services">Communication Services</option>
+                                        <option value="utilities">Utilities</option>
+                                        <option value="real_estate">Real Estate</option>
+                                    </optgroup>
                             </select>
+                            <input type="text" id="dateBox" placeholder="Enter cutoff date -> (YYYY-MM-DD)" style="padding: 8px 12px; width: 250px; border: 1px solid #2d4a6f; border-radius: 4px; background: #1a2f4a; color: #e8f1fa; font-size: 14px;">
+                            <label for="newstranslateCheckbox" style="color: #a8c5e8; font-weight: 600;">Translate to English:</label>
+                            <label class="switch">
+                                <input type="checkbox" id="translateCheckbox">
+                                <span class="slider"></span>
+                                </label>
                         <button onclick="download_rss_reports()">Collect news</button>
                         <button onclick="vectorize_rss_reports()" disabled>Add to Vector DB</button>
                     </div>
@@ -198,7 +204,12 @@
                             <option value="portfolio">Portfolio</option>
                             <option value="name_and_comps">Single name & competitors</option>
                         </select>
-                        <input type="text" id="textbox" placeholder="Enter 4-digit ticker..." disabled style="padding: 8px 12px; border: 1px solid #2d4a6f; border-radius: 4px; background: #1a2f4a; color: #e8f1fa; font-size: 14px;">
+                        <input type="text" id="tickerbox" placeholder="Enter 4-digit ticker..." disabled style="padding: 8px 12px; border: 1px solid #2d4a6f; border-radius: 4px; background: #1a2f4a; color: #e8f1fa; font-size: 14px;">
+                        <label for="filingstranslateCheckbox" style="color: #a8c5e8; font-weight: 600;">Translate to English:</label>
+                            <label class="switch">
+                                <input type="checkbox" id="translateCheckbox">
+                                <span class="slider"></span>
+                                </label>
                         <button onclick="download_edinet_reports()">Collect filings</button>
                         <button onclick="vectorize_edinet_reports()" disabled>Add to Vector DB</button>
                     </div>
@@ -231,18 +242,19 @@
         const apiBaseUrl = "https://straight8ths-github-io.onrender.com";
 
         const dropdown = document.getElementById('filingsMode');
-        const textbox = document.getElementById('textbox');
+        const tickerbox = document.getElementById('tickerbox');
+        const dateBox = document.getElementById('dateBox');
         
         // Values that should enable the text box
         const enableValues = ['name_and_comps'];
         
         dropdown.addEventListener('change', function() {
             if (enableValues.includes(this.value)) {
-                textbox.disabled = false;
-                textbox.focus();
+                tickerbox.disabled = false;
+                tickerbox.focus();
             } else {
-                textbox.disabled = true;
-                textbox.value = '';
+                tickerbox.disabled = true;
+                tickerbox.value = '';
             }
         });
 
@@ -257,13 +269,22 @@
         }
 
         function download_rss_reports() {
-            const feed = document.getElementById('newsFeeds').value;
-            if (!feed) {
+            const report_feed = document.getElementById('newsFeeds').value;
+            if (!report_feed) {
                 addLog('ERROR: No news feed selected');
                 return;
             }
-            addLog(`Collecting news from: ${feed}`);
-            addLog(`News collection complete for ${feed}`);
+            const cutoffDate = dateBox.value;
+            let url = `${apiBaseUrl}/download_rss_reports?report_feed=${report_feed}`;
+            if (cutoffDate) {
+                url += `&cutoff_date=${cutoffDate}`;
+            }
+            const translate = document.getElementById('newstranslateCheckbox').checked;
+            if (translate) {
+                url += `&translate=true`;
+            }
+            addLog(`Collecting news from: ${report_feed}`);
+            addLog(`News collection complete for ${report_feed}`);
             // "Add to Vector DB" button becomes clickable
             document.querySelector('button[onclick="vectorize_rss_reports()"]').disabled = false;
         }
@@ -287,11 +308,30 @@
 
         function download_edinet_reports() {
             const mode = document.getElementById('filingsMode').value;
+            const ticker = document.getElementById('tickerbox').value;
+            const translate = document.getElementById('filingstranslateCheckbox').checked;
+            let url = `${apiBaseUrl}/download_edinet_reports?mode=${mode}`;
+            
             if (!mode) {
                 addLog('ERROR: No report mode selected');
                 return;
             }
-            fetch(`${apiBaseUrl}/download_edinet_reports?mode=${mode}`)
+            if (mode === 'name_and_comps') {
+                if (!ticker) {
+                    addLog('ERROR: No ticker provided for single name & competitors mode');
+                    return;
+                }
+                url += `&ticker=${ticker}`;
+            }
+            if (mode === 'portfolio') {
+                addLog('Collecting filings for portfolio mode...');
+            } else {
+                addLog(`Collecting filings for ticker: ${ticker} and its competitors...`);
+            }
+            if (translate) {
+                url += `&translate=true`;
+            }
+            fetch(url)
                 .then(response => response.json())
                 .then(data => {
                     addLog(`Collecting filings in mode: ${mode}`);
