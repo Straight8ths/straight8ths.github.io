@@ -263,11 +263,7 @@ def edinet_extractor(mode: str, ticker: str = None, translate: bool = False) -> 
                     f.write("\n")
         except Exception as e:
             error_reports.append(docID)
-    else:
-        pass
     return
-
-
 
 @app.route('/rss_downloader', methods=['GET'])
 def rss_downloader(report_feed: str = None, earliest_date = None, translate: bool = False) -> None:
@@ -282,7 +278,6 @@ def rss_downloader(report_feed: str = None, earliest_date = None, translate: boo
         "Tokyo_Stock_Exchange": "https://www.jpx.co.jp/english/rss/markets_news.xml",
         "Financial_Services_Agency": "https://www.fsa.go.jp/fsaEnNewsList_rss2.xml"
     }
-
     macro_japanese = {
         "NHK": "https://news.web.nhk/n-data/conf/na/rss/cat5.xml",
         "Asahi_Business": "https://www.asahi.com/rss/asahi/business.rdf",
@@ -291,11 +286,7 @@ def rss_downloader(report_feed: str = None, earliest_date = None, translate: boo
         "Bank_of_Japan": "https://www.boj.or.jp/rss/statistics.xml",
         "PR_Times": "https://prtimes.jp/index.rdf",
     }
-
     macro_feeds = [macro_english, macro_japanese]
-
-    #------------------------------
-
     sector_energy_english = {
         "Global_Energy_Infrastructure": "https://globalenergyinfrastructure.com/rss?feed=news",
         "Global_Energy_Infrastructure_Japan": "https://globalenergyinfrastructure.com/rss?topic=japan",
@@ -305,15 +296,10 @@ def rss_downloader(report_feed: str = None, earliest_date = None, translate: boo
         "Asia_Corporate_News_Energy": "https://www.acnnewswire.com/rss/sector/Alternative_Energy_acn.xml",
         "Asia_Corporate_News_Oil_Gas": "https://www.acnnewswire.com/rss/sector/Oil__Gas_acn.xml"
     }
-
     sector_energy_japanese = {
         "Asahi_Environment_and_Energy": "https://www.asahi.com/rss/asahi/eco.rdf",
     }
-
     sector_energy_feeds = [sector_energy_english, sector_energy_japanese]
-
-    #------------------------------
-
     sector_materials_english = {
         "Japan_Rubber_Weekly": "https://www.japanrubberweekly.com/feed/",
         "Asia_Corporate_News_Metals_Mining": "https://www.acnnewswire.com/rss/sector/Metals__Mining_acn.xml",
@@ -322,16 +308,11 @@ def rss_downloader(report_feed: str = None, earliest_date = None, translate: boo
         "Asia_Corporate_News_Print_Packaging": "https://www.acnnewswire.com/rss/sector/Print__Package_acn.xml",
         "Asia_Corporate_News_Materials_Nanotech": "https://www.acnnewswire.com/rss/sector/Materials__Nanotech_acn.xml"
     }
-
     sector_materials_japanese = {
         "NIMS_General": "https://www.nims.go.jp/news/newsall.xml",
         "NIMS_News": "https://www.nims.go.jp/news/news.xml"
     }
-
     sector_materials_feeds = [sector_materials_english, sector_materials_japanese]
-
-    #------------------------------
-
     sector_industrials_english = {
         "Mitsubishi_Heavy_Industries_News": "https://www.mhi.com/rss/mhi_news.xml",
         "Mitsubishi_Group_News": "https://www.mhi.com/rss/group_news.xml",
@@ -346,16 +327,11 @@ def rss_downloader(report_feed: str = None, earliest_date = None, translate: boo
         "Asia_Corporate_News_Agritech": "https://www.acnnewswire.com/rss/sector/Agritech_acn.xml",
         "Asia_Corporate_News_Smart_Cities": "https://www.acnnewswire.com/rss/sector/Smart_Cities_acn.xml"
     }
-
     sector_industrials_japanese = {
         "MLIT_Notices": "https://www.mlit.go.jp/important.rdf",
         "MLIT_News": "https://www.mlit.go.jp/index.rdf",
     }
-
     sector_industrials_feeds = [sector_industrials_english, sector_industrials_japanese]
-
-    #------------------------------
-
     sector_consumer_discretionary_english = {
         "Asia_Corporate_News_Automotive": "https://www.acnnewswire.com/rss/sector/Automotive_acn.xml",
         "Asia_Corporate_News_Beauty_Skincare": "https://www.acnnewswire.com/rss/sector/Beauty__Skin_Care_acn.xml",
@@ -363,23 +339,15 @@ def rss_downloader(report_feed: str = None, earliest_date = None, translate: boo
         "Asia_Corporate_News_Travel_Tourism": "https://www.acnnewswire.com/rss/sector/Travel__Tourism_acn.xml",
         "Asia_Corporate_News_Watches_Jewelry": "https://www.acnnewswire.com/rss/sector/Watches__Jewelry_acn.xml",
     }
-
     sector_consumer_discretionary_japanese = {
     }
-
     sector_consumer_discretionary_feeds = [sector_consumer_discretionary_english, sector_consumer_discretionary_japanese]
-    #------------------------------
-
     sector_consumer_staples_english = {
         "Asia_Corporate_News_Food_Beverage": "https://www.acnnewswire.com/rss/sector/Food__Beverage_acn.xml"
     }
     sector_consumer_staples_japanese = {
     }
-
     sector_consumer_staples_feeds = [sector_consumer_staples_english, sector_consumer_staples_japanese]
-
-    #------------------------------
-
     sector_healthcare_english = {
         "Asia_Corporate_News_Medicine": "https://www.acnnewswire.com/rss/sector/Medicine_acn.xml",
         "Asia_Corporate_News_Alternative_Medicine": "https://www.acnnewswire.com/rss/sector/Alternative_acn.xml",
@@ -388,17 +356,12 @@ def rss_downloader(report_feed: str = None, earliest_date = None, translate: boo
         "Asia_Corporate_News_Healthcare_Pharma": "https://www.acnnewswire.com/rss/sector/Healthcare__Pharm_acn.xml",
         "Asia_Corporate_News_Medtech": "https://www.acnnewswire.com/rss/sector/MedTech_acn.xml"
     }
-
     sector_healthcare_japanese = {
         "MHLW_News": "https://www.mhlw.go.jp/stf/news.rdf",
         "MHLW_Emergency": "https://www.mhlw.go.jp/stf/kinkyu.rdf",
         "MHLW_Influenza": "https://www.mhlw.go.jp/rss/inful_news.rdf"
     }
-
     sector_healthcare_feeds = [sector_healthcare_english, sector_healthcare_japanese]
-
-    #------------------------------
-
     sector_financials_english = {
         "Asian_Development_Bank_News": "https://feeds.feedburner.com/adb_news",
         "Asian_Development_Bank_Whats_New": "https://feeds.feedburner.com/adb_whatsnew",
@@ -418,16 +381,11 @@ def rss_downloader(report_feed: str = None, earliest_date = None, translate: boo
         "Asia_Corporate_News_Private_Equity_Venture_Capital": "https://www.acnnewswire.com/rss/sector/PE_VC__Alternatives_acn.xml",
         "Asia_Corporate_News_Trade_Finance": "https://www.acnnewswire.com/rss/sector/Trade_Finance_acn.xml"
     }
-
     sector_financials_japanese = {
         "FSA_News": "https://www.fsa.go.jp/sescReportList_rss2.xml",
         "FSA_Other_News": "https://www.fsa.go.jp/sescOtherList_rss2.xml",
     }
-
     sector_financials_feeds = [sector_financials_english, sector_financials_japanese]
-
-    #------------------------------
-
     sector_information_technology_english = {
         "The_Bridge": "https://thebridge.jp/en/feed",
         "Asia_Corporate_News_Technology": "https://www.acnnewswire.com/rss/sector/Technology_acn.xml",
@@ -440,16 +398,10 @@ def rss_downloader(report_feed: str = None, earliest_date = None, translate: boo
         "Asia_Corporate_News_Engineering": "https://www.acnnewswire.com/rss/sector/Engineering_acn.xml",
         "Asia_Corporate_News_Enterprise_IT": "https://www.acnnewswire.com/rss/sector/Enterprise_IT_acn.xml"
     }
-
-
     sector_information_technology_japanese = {
         "Digital_Agency_News": "https://www.digital.go.jp/rss/news.xml",
     }
-
     sector_information_technology_feeds = [sector_information_technology_english, sector_information_technology_japanese]
-
-    #------------------------------
-
     sector_communication_services_english = {
         "RCR_Wireless": "https://www.rcrwireless.com/feed",
         "Asia_Corporate_News_Advertising": "https://www.acnnewswire.com/rss/sector/Advertising_acn.xml",
@@ -458,38 +410,23 @@ def rss_downloader(report_feed: str = None, earliest_date = None, translate: boo
         "Asia_Corporate_News_Telecoms": "https://www.acnnewswire.com/rss/sector/Telecoms_5G_acn.xml",
         "Asia_Corporate_News_Wireless": "https://www.acnnewswire.com/rss/sector/Wireless_Apps_acn.xml"
     }
-
     sector_communication_services_japanese = {
     }
-
     sector_communication_services_feeds = [sector_communication_services_english, sector_communication_services_japanese]
-
-    #------------------------------
-
     sector_utilities_english = {
         "Asia_Corporate_News_Water": "https://www.acnnewswire.com/rss/sector/Water_acn.xml"
     }
-
     sector_utilities_japanese = {
     }
-
     sector_utilities_feeds = [sector_utilities_english, sector_utilities_japanese]
-
-    #-----------------------------
-
     sector_real_estate_english = {
         "Real_Estate_Japan": "https://resources.realestate.co.jp/feed/",
         "Asia_Corporate_News_Real_Estate": "https://www.acnnewswire.com/rss/sector/Real_Estate__REIT_acn.xml"
     }
-
     sector_real_estate_japanese = {
         "Japan_Real_Estate_Investment_Corporation": "https://www.j-re.co.jp/ja_cms/news.xml",
     }
-
     sector_real_estate_feeds = [sector_real_estate_english, sector_real_estate_japanese]
-
-    #-----------------------------
-
     gics_feeds = [
         sector_energy_feeds,
         sector_materials_feeds,
@@ -503,7 +440,6 @@ def rss_downloader(report_feed: str = None, earliest_date = None, translate: boo
         sector_utilities_feeds,
         sector_real_estate_feeds
     ]
-
     parameter_list = {
         "macro_feeds": macro_feeds,
         "sector_energy_feeds": sector_energy_feeds,
@@ -518,8 +454,7 @@ def rss_downloader(report_feed: str = None, earliest_date = None, translate: boo
         "sector_utilities_feeds": sector_utilities_feeds,
         "sector_real_estate_feeds": sector_real_estate_feeds,
     }
-    #------------------------------
-
+    
     # Make a file if one does not exist
     filepath = RSS_OUTPUT_PATH / f"rss_feed_output_{datetime.now().strftime('%Y%m%d')}.txt"
 
