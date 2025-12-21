@@ -67,6 +67,10 @@
             font-weight: 500;
         }
 
+        .align-right-container {
+            text-align: right;
+        }
+
         button:hover {
             background: #2870b8;
         }
@@ -148,11 +152,12 @@
 </head>
 <body>
     <div class="container">
-        <h1 style="margin-bottom: 20px; color: #a8c5e8;">Macro, Industry, and Sector Information</h1>
-        
+        <h1 style="margin-bottom: 20px; color: #a8c5e8;">Information Gathering Toolkit</h1>
+        <hr style="border: 0; height: 1px; background: #1e3a5f; margin-bottom: 20px;">
+        <h2 style="margin-bottom: 20px; color: #a8c5e8; font-size: 24px;">Macro and Sector-Level News</h2>
         <div class="controls-section">
             <div class="control-group">
-                <label for="newsFeeds">Choose a news type:</label>
+                <label for="newsFeeds">News type:</label>
                     <select id="newsFeeds" name="newsFeeds">
                     <option value="">Select news category...</option>
                     <optgroup label="Macro News">
@@ -173,10 +178,13 @@
                     </optgroup>
                     </select>
                 <button onclick="collectNews()">Collect news</button>
+                <button onclick="vectorizeNews()" disabled>Add to Vector DB</button>
             </div>
-
+        </div>
+        <h2 style="margin-bottom: 20px; color: #a8c5e8; font-size: 24px;">Company-Specific Filings</h2>
+        <div class="controls-section">
             <div class="control-group">
-                <label for="filingsMode">Select filings mode:</label>
+                <label for="filingsMode">Filings mode:</label>
                 <select id="filingsMode">
                     <option value="">Select mode...</option>
                     <option value="portfolio">Portfolio</option>
@@ -184,6 +192,7 @@
                 </select>
                 <input type="text" id="textbox" placeholder="Enter 4-digit ticker..." disabled style="padding: 8px 12px; border: 1px solid #2d4a6f; border-radius: 4px; background: #1a2f4a; color: #e8f1fa; font-size: 14px;">
                 <button onclick="collectReports()">Collect filings</button>
+                <button onclick="vectorizeReports()" disabled>Add to Vector DB</button>
             </div>
         </div>
 
@@ -237,6 +246,18 @@
             }
             addLog(`Collecting news from: ${feed}`);
             addLog(`News collection complete for ${feed}`);
+            // "Add to Vector DB" button becomes clickable
+            document.querySelector('button[onclick="vectorizeNews()"]').disabled = false;
+        }
+
+        function vectorizeNews() {
+            // Starts out disabled
+            if (document.querySelector('button[onclick="vectorizeNews()"]').disabled) {
+                addLog('ERROR: No news collected to vectorize');
+                return;
+            }
+            addLog('Vectorizing collected news...');
+            addLog('News vectorization complete');
         }
 
         function collectReports() {
@@ -247,6 +268,17 @@
             }
             addLog(`Generating ${mode} report...`);
             addLog(`Report generation complete`);
+            // "Add to Vector DB" button becomes clickable
+            document.querySelector('button[onclick="vectorizeReports()"]').disabled = false;
+        }
+
+        function vectorizeReports() {
+            if (document.querySelector('button[onclick="vectorizeReports()"]').disabled) {
+                addLog('ERROR: No reports collected to vectorize');
+                return;
+            }
+            addLog('Vectorizing collected reports...');
+            addLog('Report vectorization complete');
         }
 
         function sendMessage() {
