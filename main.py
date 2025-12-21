@@ -29,6 +29,10 @@ import pickle
 app = Flask(__name__)
 CORS(app)
 
+@app.route('/')
+def home():
+    return "Welcome to the information-gathering tool suite!"
+
 ### DIRECTORIES SETUP ###
 # Define base directory
 BASE_DIR = Path(__file__).resolve().parent
@@ -496,25 +500,30 @@ def clear_folder(folder_path: Path):
         if file.is_file():
             file.unlink()
 
+@app.route('/clear_edinet_reports', methods=['GET'])
 def clear_edinet_reports():
     """Clear all files in the EDINET reports directory."""
     clear_folder(EDINET_REPORTS_PATH)
 
+@app.route('/clear_rss_reports', methods=['GET'])
 def clear_rss_reports():
     """Clear all files in the RSS feed output directory."""
     clear_folder(RSS_OUTPUT_PATH)
 
+@app.route('/vectorize_edinet_reports', methods=['GET'])
 def vectorize_EDINET_reports():
     """Ingest all text files in the EDINET_reports directory into the vector store."""
     ingest_directory(EDINET_REPORTS_PATH)
     clear_edinet_reports()
-    
+
+@app.route('/vectorize_rss_reports', methods=['GET'])
 def vectorize_RSS_reports():
     """Ingest all text files in the RSS_feed_output directory into the vector store."""
     ingest_directory(RSS_OUTPUT_PATH)
     clear_rss_reports()
 
 ### QUESTION ANSWERING SETUP ###
+@app.route('/answer_question', methods=['GET'])
 def answer_question(question: str):
     
     def format_docs(docs):
