@@ -184,8 +184,8 @@
                                 <option value="real_estate">Real Estate</option>
                             </optgroup>
                             </select>
-                        <button onclick="collectNews()">Collect news</button>
-                        <button onclick="vectorizeNews()" disabled>Add to Vector DB</button>
+                        <button onclick="download_rss_reports()">Collect news</button>
+                        <button onclick="vectorize_rss_reports()" disabled>Add to Vector DB</button>
                     </div>
             </div>
             <div style="height: 20px;"></div>
@@ -199,8 +199,8 @@
                             <option value="name_and_comps">Single name & competitors</option>
                         </select>
                         <input type="text" id="textbox" placeholder="Enter 4-digit ticker..." disabled style="padding: 8px 12px; border: 1px solid #2d4a6f; border-radius: 4px; background: #1a2f4a; color: #e8f1fa; font-size: 14px;">
-                        <button onclick="collectReports()">Collect filings</button>
-                        <button onclick="vectorizeReports()" disabled>Add to Vector DB</button>
+                        <button onclick="download_edinet_reports()">Collect filings</button>
+                        <button onclick="vectorize_edinet_reports()" disabled>Add to Vector DB</button>
                     </div>
             </div>
             <div style="height: 20px;"></div>
@@ -228,6 +228,8 @@
     </div>
     
     <script>
+        const apiBaseUrl = "https://straight8ths-github-io.onrender.com";
+
         const dropdown = document.getElementById('filingsMode');
         const textbox = document.getElementById('textbox');
         
@@ -254,7 +256,7 @@
             logsBox.scrollTop = logsBox.scrollHeight;
         }
 
-        function collectNews() {
+        function download_rss_reports() {
             const feed = document.getElementById('newsFeeds').value;
             if (!feed) {
                 addLog('ERROR: No news feed selected');
@@ -263,38 +265,59 @@
             addLog(`Collecting news from: ${feed}`);
             addLog(`News collection complete for ${feed}`);
             // "Add to Vector DB" button becomes clickable
-            document.querySelector('button[onclick="vectorizeNews()"]').disabled = false;
+            document.querySelector('button[onclick="vectorize_rss_reports()"]').disabled = false;
         }
 
-        function vectorizeNews() {
+        function vectorize_rss_reports() {
             // Starts out disabled
-            if (document.querySelector('button[onclick="vectorizeNews()"]').disabled) {
+            if (document.querySelector('button[onclick="vectorize_rss_reports()"]').disabled) {
                 addLog('ERROR: No news collected to vectorize');
                 return;
             }
-            addLog('Vectorizing collected news...');
-            addLog('News vectorization complete');
+            fetch(`${apiBaseUrl}/vectorize_rss_reports`)
+                .then(response => response.json())
+                .then(data => {
+                    addLog('Vectorizing collected news...');
+                    addLog('News vectorization complete');
+                })
+                .catch(error => {
+                    addLog('ERROR: Failed to vectorize news');
+                });
         }
 
-        function collectReports() {
+        function download_edinet_reports() {
             const mode = document.getElementById('filingsMode').value;
             if (!mode) {
                 addLog('ERROR: No report mode selected');
                 return;
             }
-            addLog(`Generating ${mode} report...`);
-            addLog(`Report generation complete`);
+            fetch(`${apiBaseUrl}/download_edinet_reports?mode=${mode}`)
+                .then(response => response.json())
+                .then(data => {
+                    addLog(`Collecting filings in mode: ${mode}`);
+                    addLog(`Filings collection complete for mode: ${mode}`);
+                })
+                .catch(error => {
+                    addLog('ERROR: Failed to collect filings');
+                });
             // "Add to Vector DB" button becomes clickable
-            document.querySelector('button[onclick="vectorizeReports()"]').disabled = false;
+            document.querySelector('button[onclick="vectorize_edinet_reports()"]').disabled = false;
         }
 
-        function vectorizeReports() {
-            if (document.querySelector('button[onclick="vectorizeReports()"]').disabled) {
+        function vectorize_edinet_reports() {
+            if (document.querySelector('button[onclick="vectorize_edinet_reports()"]').disabled) {
                 addLog('ERROR: No reports collected to vectorize');
                 return;
             }
-            addLog('Vectorizing collected reports...');
-            addLog('Report vectorization complete');
+            fetch(`${apiBaseUrl}/vectorize_edinet_reports`)
+                .then(response => response.json())
+                .then(data => {
+                    addLog('Vectorizing collected reports...');
+                    addLog('Report vectorization complete');
+                })
+                .catch(error => {
+                    addLog('ERROR: Failed to vectorize reports');
+                });
         }
 
         function sendMessage() {

@@ -171,8 +171,8 @@ def ingest_directory(folder: str):
         if path.suffix.lower() in {".txt", ".md"}:
             ingest_document(path)
 
-@app.route('/edinet_extractor', methods=['GET'])
-def edinet_extractor(mode: str, ticker: str = None, translate: bool = False) -> None:
+@app.route('/download_edinet_reports', methods=['GET'])
+def download_edinet_reports(mode: str, ticker: str = None, translate: bool = False) -> None:
     """Extract recent EDINET filings for companies in our Google Sheet list."""
 
     # Core URLs
@@ -268,8 +268,8 @@ def edinet_extractor(mode: str, ticker: str = None, translate: bool = False) -> 
             error_reports.append(docID)
     return
 
-@app.route('/rss_downloader', methods=['GET'])
-def rss_downloader(report_feed: str = None, earliest_date = None, translate: bool = False) -> None:
+@app.route('/download_rss_reports', methods=['GET'])
+def download_rss_reports(report_feed: str = None, earliest_date = None, translate: bool = False) -> None:
     macro_english = {
         "Yomiuri_Business": "https://japannews.yomiuri.co.jp/business/feed/",
         "Yomiuri_Economy": "https://japannews.yomiuri.co.jp/business/economy/feed",
