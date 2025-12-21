@@ -1,5 +1,4 @@
 from pathlib import Path
-import pickle
 from tabulate import tabulate
 import edinet_tools
 import os
@@ -26,6 +25,7 @@ import hashlib
 from flask import Flask, jsonify
 from flask_cors import CORS
 import pdfplumber
+import pickle
 
 app = Flask(__name__)
 CORS(app)

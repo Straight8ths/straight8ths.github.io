@@ -1,18 +1,10 @@
-pathlib
-pickle
 tabulate
 edinet_tools
-os
 pandas
 python-dotenv
-dotenv
-rich.pretty
 gspread
 google-auth
-json
 feedparser
-time
-datetime
 requests
 deepl
 pinecone
@@ -23,7 +15,6 @@ langchain_openai
 langchain_community
 langchain_text_splitters
 langchain_core
-hashlib
 flask
 flask_cors
 pdfplumber
