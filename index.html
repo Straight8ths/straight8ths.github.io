@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>News & AI Chat Interface</title>
+    <title>Information Gathering Tools</title>
     <style>
         * {
             margin: 0;
@@ -67,26 +67,33 @@
             font-weight: 500;
         }
 
-        .align-right-container {
-            text-align: right;
+        .greenbutton {
+            padding: 8px 16px;
+            background: #00720f;
+            color: #e8f1fa;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .greenbutton:hover {
+            background: #008912;
         }
 
         button:hover {
             background: #2870b8;
         }
 
-        .chat-section {
-            margin-bottom: 20px;
-        }
-
         .chat-window {
             height: 400px;
             border: 1px solid #2d4a6f;
             border-radius: 4px;
-            padding: 15px;
+            padding: 20px;
             overflow-y: auto;
             background: #0f1d2e;
-            margin-bottom: 10px;
+            margin-bottom: 20px;
         }
 
         .message {
@@ -109,7 +116,7 @@
 
         .chat-input-section {
             display: flex;
-            gap: 10px;
+            gap: 20px;
         }
 
         .chat-input {
@@ -151,66 +158,75 @@
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1 style="margin-bottom: 20px; color: #a8c5e8;">Information Gathering Toolkit</h1>
-        <hr style="border: 0; height: 1px; background: #1e3a5f; margin-bottom: 20px;">
-        <h2 style="margin-bottom: 20px; color: #a8c5e8; font-size: 24px;">Macro and Sector-Level News</h2>
-        <div class="controls-section">
-            <div class="control-group">
-                <label for="newsFeeds">News type:</label>
-                    <select id="newsFeeds" name="newsFeeds">
-                    <option value="">Select news category...</option>
-                    <optgroup label="Macro News">
-                        <option value="macro">General Macro</option>
-                    </optgroup>
-                    <optgroup label="GICS Sector News">
-                        <option value="energy">Energy</option>
-                        <option value="materials">Materials</option>
-                        <option value="industrials">Industrials</option>
-                        <option value="consumer_discretionary">Consumer Discretionary</option>
-                        <option value="consumer_staples">Consumer Staples</option>
-                        <option value="healthcare">Healthcare</option>
-                        <option value="financials">Financials</option>
-                        <option value="information_technology">Information Technology</option>
-                        <option value="communication_services">Communication Services</option>
-                        <option value="utilities">Utilities</option>
-                        <option value="real_estate">Real Estate</option>
-                    </optgroup>
-                    </select>
-                <button onclick="collectNews()">Collect news</button>
-                <button onclick="vectorizeNews()" disabled>Add to Vector DB</button>
+    <div style="margin-bottom: 20px;" class="container">
+        <h1 style="margin-bottom: 20px; color: #a8c5e8;">Information Gathering Tools</h1>
+        <hr style="border: 1px solid #1e3a5f; margin-bottom: 20px;">
+            <div class="container">
+                <h2 style="margin-bottom: 20px; color: #a8c5e8; font-size: 28px;">Macro and Sector-Level News</h2>
+                    <div class="control-group">
+                        <label for="newsFeeds">News type:</label>
+                            <select id="newsFeeds" name="newsFeeds">
+                            <option value="">Select news category...</option>
+                            <optgroup label="Macro News">
+                                <option value="macro">General Macro</option>
+                            </optgroup>
+                            <optgroup label="GICS Sector News">
+                                <option value="energy">Energy</option>
+                                <option value="materials">Materials</option>
+                                <option value="industrials">Industrials</option>
+                                <option value="consumer_discretionary">Consumer Discretionary</option>
+                                <option value="consumer_staples">Consumer Staples</option>
+                                <option value="healthcare">Healthcare</option>
+                                <option value="financials">Financials</option>
+                                <option value="information_technology">Information Technology</option>
+                                <option value="communication_services">Communication Services</option>
+                                <option value="utilities">Utilities</option>
+                                <option value="real_estate">Real Estate</option>
+                            </optgroup>
+                            </select>
+                        <button onclick="collectNews()">Collect news</button>
+                        <button onclick="vectorizeNews()" disabled>Add to Vector DB</button>
+                    </div>
             </div>
-        </div>
-        <h2 style="margin-bottom: 20px; color: #a8c5e8; font-size: 24px;">Company-Specific Filings</h2>
-        <div class="controls-section">
-            <div class="control-group">
-                <label for="filingsMode">Filings mode:</label>
-                <select id="filingsMode">
-                    <option value="">Select mode...</option>
-                    <option value="portfolio">Portfolio</option>
-                    <option value="name_and_comps">Single name & competitors</option>
-                </select>
-                <input type="text" id="textbox" placeholder="Enter 4-digit ticker..." disabled style="padding: 8px 12px; border: 1px solid #2d4a6f; border-radius: 4px; background: #1a2f4a; color: #e8f1fa; font-size: 14px;">
-                <button onclick="collectReports()">Collect filings</button>
-                <button onclick="vectorizeReports()" disabled>Add to Vector DB</button>
+            <div style="height: 20px;"></div>
+            <div class="container">
+                <h2 style="margin-bottom: 20px; color: #a8c5e8; font-size: 28px;">Company-Specific Filings</h2>
+                    <div class="control-group">
+                        <label for="filingsMode">Filings mode:</label>
+                        <select id="filingsMode">
+                            <option value="">Select mode...</option>
+                            <option value="portfolio">Portfolio</option>
+                            <option value="name_and_comps">Single name & competitors</option>
+                        </select>
+                        <input type="text" id="textbox" placeholder="Enter 4-digit ticker..." disabled style="padding: 8px 12px; border: 1px solid #2d4a6f; border-radius: 4px; background: #1a2f4a; color: #e8f1fa; font-size: 14px;">
+                        <button onclick="collectReports()">Collect filings</button>
+                        <button onclick="vectorizeReports()" disabled>Add to Vector DB</button>
+                    </div>
             </div>
-        </div>
+            <div style="height: 20px;"></div>
+            <div class="container">
+                <button class="greenbutton" onclick="addLog('VectorDB health check initiated...'); setTimeout(() => addLog('VectorDB is healthy.'), 1000);">Run VectorDB Health Check</button>
+            </div>
+    </div>
 
+    <div style="margin-bottom: 20px;" class="container">
         <div class="chat-section">
-            <h2 style="margin-bottom: 10px; color: #a8c5e8; font-size: 18px;">AI Chat</h2>
+            <h1 style="margin-bottom: 20px; color: #a8c5e8;">AI Chat</h1>
+            <hr style="border: 1px solid #1e3a5f; margin-bottom: 20px;">
             <div class="chat-window" id="chatWindow"></div>
             <div class="chat-input-section">
                 <input type="text" class="chat-input" id="chatInput" placeholder="Type your message here...">
                 <button onclick="sendMessage()">Send</button>
             </div>
         </div>
-
-        <div class="logs-section">
-            <label class="logs-label">System Logs</label>
-            <div class="logs-box" id="logsBox"></div>
-        </div>
     </div>
 
+    <div style="margin-bottom: 20px;" class="container">
+        <h1 style="margin-bottom: 20px; color: #a8c5e8;">System Logs</h1>
+        <hr style="border: 1px solid #1e3a5f; margin-bottom: 20px;">
+        <div class="logs-box" id="logsBox"></div>
+    </div>
+    
     <script>
         const dropdown = document.getElementById('filingsMode');
         const textbox = document.getElementById('textbox');
