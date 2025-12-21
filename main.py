@@ -608,6 +608,11 @@ def answer_question_route():
     answer = answer_question(question)
     return jsonify({"answer": answer})
 
+@app.route('/vector_db_status', methods=['GET'])
+def vector_db_status_route():
+    index_stats = index.describe_index_stats()
+    return jsonify(index_stats)
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
 

@@ -216,7 +216,7 @@
             </div>
             <div style="height: 20px;"></div>
             <div class="container">
-                <button class="greenbutton" onclick="addLog('VectorDB health check initiated...'); setTimeout(() => addLog('VectorDB is healthy.'), 1000);">Run VectorDB Health Check</button>
+                <button class="greenbutton" onclick="checkVectorDBHealth()">Run VectorDB Health Check</button>
             </div>
     </div>
 
@@ -283,8 +283,15 @@
             if (translate) {
                 url += `&translate=true`;
             }
-            addLog(`Collecting news from: ${report_feed}`);
-            addLog(`News collection complete for ${report_feed}`);
+            fetch(url, { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    addLog(`Collecting news from: ${report_feed}`);
+                    addLog(`News collection complete for ${report_feed}`);
+                })
+                .catch(error => {
+                    addLog('ERROR: Failed to collect news');
+                });
             // "Add to Vector DB" button becomes clickable
             document.querySelector('button[onclick="vectorize_rss_reports()"]').disabled = false;
         }
@@ -295,7 +302,7 @@
                 addLog('ERROR: No news collected to vectorize');
                 return;
             }
-            fetch(`${apiBaseUrl}/vectorize_rss_reports`)
+            fetch(`${apiBaseUrl}/vectorize_rss_reports`, { method: 'POST' })
                 .then(response => response.json())
                 .then(data => {
                     addLog('Vectorizing collected news...');
@@ -331,7 +338,7 @@
             if (translate) {
                 url += `&translate=true`;
             }
-            fetch(url)
+            fetch(url, { method: 'POST' })
                 .then(response => response.json())
                 .then(data => {
                     addLog(`Collecting filings in mode: ${mode}`);
@@ -349,7 +356,7 @@
                 addLog('ERROR: No reports collected to vectorize');
                 return;
             }
-            fetch(`${apiBaseUrl}/vectorize_edinet_reports`)
+            fetch(`${apiBaseUrl}/vectorize_edinet_reports`, { method: 'POST' })
                 .then(response => response.json())
                 .then(data => {
                     addLog('Vectorizing collected reports...');
@@ -387,6 +394,18 @@
             }, 500);
             
             chatWindow.scrollTop = chatWindow.scrollHeight;
+        }
+
+        function checkVectorDBHealth() {
+            addLog('VectorDB health check initiated...');
+            fetch(`${apiBaseUrl}/vector_db_status`, { method: 'GET' })
+                .then(response => response.json())
+                .then(data => {
+                    addLog('VectorDB is healthy.');
+                })
+                .catch(error => {
+                    addLog('ERROR: VectorDB health check failed.');
+                });
         }
 
         document.getElementById('chatInput').addEventListener('keypress', function(e) {
