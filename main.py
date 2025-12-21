@@ -561,3 +561,6 @@ def answer_question(question: str):
 
 # === To view Pinecone index stats, uncomment the following line ===
 # print(index.describe_index_stats())
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=10000)

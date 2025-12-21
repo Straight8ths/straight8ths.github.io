@@ -1,4 +1,4 @@
-pathlibh
+pathlib
 pickle
 tabulate
 edinet_tools
