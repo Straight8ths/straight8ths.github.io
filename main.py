@@ -626,5 +626,3 @@ if __name__ == '__main__':
 
 # === To view Pinecone index stats, uncomment the following line ===
 # print(index.describe_index_stats())
-
-print(vector_db_status_route())
