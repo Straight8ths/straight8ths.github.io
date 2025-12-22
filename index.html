@@ -406,6 +406,7 @@
                 .then(data => {
                     addLog('VectorDB is healthy.');
                 })
+                // Red text for errors
                 .catch(error => {
                     addLog('ERROR: VectorDB health check failed.');
                 });

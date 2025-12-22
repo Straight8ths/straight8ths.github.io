@@ -567,7 +567,7 @@ def get_edinet_reports():
     ticker = data.get("ticker", None)
     translate = data.get("translate", False)
     edinet_report_downloader(mode=mode, ticker=ticker, translate=translate)
-    return jsonify({"status": "EDINET reports downloaded."}), 200
+    return jsonify({"status": "EDINET reports downloaded."})
 
 @app.route('/download_rss_reports', methods=['POST'])
 def get_rss_reports():
@@ -576,46 +576,49 @@ def get_rss_reports():
     earliest_date = data.get("earliest_date", "2023-01-01")
     translate = data.get("translate", False)
     download_rss_reports(report_feed=report_feed, earliest_date=earliest_date, translate=translate)
-    return jsonify({"status": "RSS reports downloaded."}), 200
+    return jsonify({"status": "RSS reports downloaded."})
 
 @app.route('/clear_edinet_reports', methods=['POST'])
 def clear_edinet_reports_route():
     """Clear all files in the EDINET reports directory."""
     clear_edinet_reports()
-    return jsonify({"status": "EDINET reports cleared."}), 200
+    return jsonify({"status": "EDINET reports cleared."})
 
 @app.route('/clear_rss_reports', methods=['POST'])
 def clear_rss_reports_route():
     """Clear all files in the RSS feed output directory."""
     clear_rss_reports()
-    return jsonify({"status": "RSS reports cleared."}), 200
+    return jsonify({"status": "RSS reports cleared."})
 
 @app.route('/vectorize_edinet_reports', methods=['POST'])
 def vectorize_edinet_reports_route():
     """Ingest all text files in the EDINET_reports directory into the vector store."""
     vectorize_edinet_reports()
-    return jsonify({"status": "EDINET reports vectorized."}), 200
+    return jsonify({"status": "EDINET reports vectorized."})
 
 @app.route('/vectorize_rss_reports', methods=['POST'])
 def vectorize_rss_reports_route():
     """Ingest all text files in the RSS_feed_output directory into the vector store."""
     vectorize_rss_reports()
-    return jsonify({"status": "RSS reports vectorized."}), 200
+    return jsonify({"status": "RSS reports vectorized."})
 
 @app.route('/answer_question', methods=['POST'])
 def answer_question_route():
     data = request.get_json()
     question = data.get("question", "")
     answer = answer_question(question)
-    return jsonify({"answer": answer}), 200
+    return jsonify({"answer": answer})
 
 @app.route('/vector_db_status', methods=['GET'])
 def vector_db_status_route():
     if index is None:
-        return jsonify({"error": "Index not initialized"}), 500
-
+        return jsonify({"error": "Index not initialized"})
+    try:
+        index.describe_index_stats()
+    except Exception as e:
+        raise RuntimeError(f"Pinecone init failed: {e}")
     index_stats = index.describe_index_stats()
-    return jsonify(index_stats), 200
+    return jsonify(index_stats)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000) 
