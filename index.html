@@ -276,7 +276,7 @@
             }
             let url = `${apiBaseUrl}/download_rss_reports?report_feed=${report_feed}`;
             
-            const earliest_date = dateBox.value;
+            const earliest_date = document.getElementById('dateBox').value;
             if (earliest_date) {
                 url += `&earliest_date=${earliest_date}`;
             }

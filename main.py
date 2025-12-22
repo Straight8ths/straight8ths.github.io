@@ -93,7 +93,10 @@ if index_name not in pc.list_indexes().names():
         )
     )
 
-index = pc.Index("example-index")
+index = pc.Index(
+    name="example-index",
+    host=os.getenv("PINECONE_HOST")
+)
 
 # Select text splitter, embedding model, and vector store
 splitter = RecursiveCharacterTextSplitter(
@@ -507,12 +510,10 @@ def clear_rss_reports():
     """Clear all files in the RSS feed output directory."""
     clear_folder(RSS_OUTPUT_PATH)
 
-
 def vectorize_edinet_reports():
     """Ingest all text files in the EDINET_reports directory into the vector store."""
     ingest_directory(EDINET_REPORTS_PATH)
     clear_edinet_reports()
-
 
 def vectorize_rss_reports():
     """Ingest all text files in the RSS_feed_output directory into the vector store."""
@@ -625,3 +626,5 @@ if __name__ == '__main__':
 
 # === To view Pinecone index stats, uncomment the following line ===
 # print(index.describe_index_stats())
+
+print(vector_db_status_route())
