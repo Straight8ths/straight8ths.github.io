@@ -276,16 +276,16 @@
             }
             let url = `${apiBaseUrl}/download_rss_reports?report_feed=${report_feed}`;
             
-            const cutoffDate = dateBox.value;
-            if (cutoffDate) {
-                url += `&cutoff_date=${cutoffDate}`;
+            const earliest_date = dateBox.value;
+            if (earliest_date) {
+                url += `&earliest_date=${earliest_date}`;
             }
 
             const translate = document.getElementById('newstranslateCheckbox').checked;
             if (translate) {
                 url += `&translate=true`;
             }
-            
+
             fetch(url, { method: 'POST' })
                 .then(response => response.json())
                 .then(data => {
