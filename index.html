@@ -274,15 +274,18 @@
                 addLog('ERROR: No news feed selected');
                 return;
             }
-            const cutoffDate = dateBox.value;
             let url = `${apiBaseUrl}/download_rss_reports?report_feed=${report_feed}`;
+            
+            const cutoffDate = dateBox.value;
             if (cutoffDate) {
                 url += `&cutoff_date=${cutoffDate}`;
             }
+
             const translate = document.getElementById('newstranslateCheckbox').checked;
             if (translate) {
                 url += `&translate=true`;
             }
+            
             fetch(url, { method: 'POST' })
                 .then(response => response.json())
                 .then(data => {

@@ -614,7 +614,7 @@ def vector_db_status_route():
     return jsonify(index_stats)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+    app.run(host='0.0.0.0', port=10000) 
 
 # === To delete the Pinecone index, uncomment the following lines ===
 # pc.delete_index(name=index_name)
