@@ -29,7 +29,11 @@ import pickle
 app = Flask(__name__)
 CORS(app)
 
-@app.route('/')
+@app.route("/ping")
+def ping():
+    return "pong"
+
+@app.route('/', methods=['GET'])
 def home():
     return render_template('index.html')
 
