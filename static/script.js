@@ -48,7 +48,7 @@ function download_rss_reports() {
         url += `&translate=true`;
     }
 
-    fetch(url, { method: 'POST' })
+    fetch(url, { method: 'GET' })
         .then(response => response.json())
         .then(data => {
             addLog(`Collecting news from: ${report_feed}`);
@@ -67,11 +67,12 @@ function vectorize_rss_reports() {
         addLog('ERROR: No news collected to vectorize');
         return;
     }
-    fetch(`/vectorize_rss_reports`, { method: 'POST' })
+    fetch(`/vectorize_rss_reports`, { method: 'GET' })
         .then(response => response.json())
         .then(data => {
             addLog('Vectorizing collected news...');
             addLog('News vectorization complete');
+            addLog(`Vectors added: ${data.vectors_added}`);
         })
         .catch(error => {
             addLog('ERROR: Failed to vectorize news');
@@ -121,11 +122,12 @@ function vectorize_edinet_reports() {
         addLog('ERROR: No reports collected to vectorize');
         return;
     }
-    fetch(`/vectorize_edinet_reports`, { method: 'POST' })
+    fetch(`/vectorize_edinet_reports`, { method: 'GET' })
         .then(response => response.json())
         .then(data => {
             addLog('Vectorizing collected reports...');
             addLog('Report vectorization complete');
+            addLog(`Vectors added: ${data.vectors_added}`);
         })
         .catch(error => {
             addLog('ERROR: Failed to vectorize reports');

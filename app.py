@@ -438,17 +438,17 @@ def download_rss_reports(report_feed: str = None, cutoff_date = None, translate:
     ]
     parameter_list = {
         "macro_feeds": macro_feeds,
-        "sector_energy_feeds": sector_energy_feeds,
-        "sector_materials_feeds": sector_materials_feeds,
-        "sector_industrials_feeds": sector_industrials_feeds,
-        "sector_consumer_discretionary_feeds": sector_consumer_discretionary_feeds,
-        "sector_consumer_staples_feeds": sector_consumer_staples_feeds,
-        "sector_healthcare_feeds": sector_healthcare_feeds,
-        "sector_financials_feeds": sector_financials_feeds,
-        "sector_information_technology_feeds": sector_information_technology_feeds,
-        "sector_communication_services_feeds": sector_communication_services_feeds,
-        "sector_utilities_feeds": sector_utilities_feeds,
-        "sector_real_estate_feeds": sector_real_estate_feeds,
+        "energy": sector_energy_feeds,
+        "materials": sector_materials_feeds,
+        "industrials": sector_industrials_feeds,
+        "consumer_discretionary": sector_consumer_discretionary_feeds,
+        "consumer_staples": sector_consumer_staples_feeds,
+        "healthcare": sector_healthcare_feeds,
+        "financials": sector_financials_feeds,
+        "information_technology": sector_information_technology_feeds,
+        "communication_services": sector_communication_services_feeds,
+        "utilities": sector_utilities_feeds,
+        "real_estate": sector_real_estate_feeds,
     }
     
     # Make a file if one does not exist
@@ -519,8 +519,6 @@ def answer_question(question: str):
             f"[Source: {doc.metadata.get('source')}]\n{doc.page_content}"
             for doc in docs        )
 
-
-
     retriever = vectorstore.as_retriever(
         search_type="similarity",
         search_kwargs={"k": 5}    )
@@ -549,7 +547,7 @@ def answer_question(question: str):
     response = llm.invoke(messages)
     return response.content
 
-@app.route('/download_edinet_reports', methods=['POST'])
+@app.route('/download_edinet_reports', methods=['GET'])
 def get_edinet_reports():
     data = request.get_json()
     mode = data.get("mode", "portfolio")
@@ -558,40 +556,45 @@ def get_edinet_reports():
     edinet_report_downloader(mode=mode, ticker=ticker, translate=translate)
     return jsonify({"status": "EDINET reports downloaded."})
 
-@app.route('/download_rss_reports', methods=['POST'])
+@app.route('/download_rss_reports', methods=['GET'])
 def get_rss_reports():
-    data = request.get_json()
-    report_feed = data.get("report_feed", "macro_feeds")
-    earliest_date = data.get("earliest_date", "2023-01-01")
-    translate = data.get("translate", False)
-    download_rss_reports(report_feed=report_feed, earliest_date=earliest_date, translate=translate)
+    report_feed = request.args.get("report_feed", "macro_feeds")
+    cutoff_date = request.args.get("earliest_date", "2023-01-01")
+    translate = request.args.get("translate", False)
+    download_rss_reports(report_feed=report_feed, cutoff_date=cutoff_date, translate=translate)
     return jsonify({"status": "RSS reports downloaded."})
 
-@app.route('/clear_edinet_reports', methods=['POST'])
+@app.route('/clear_edinet_reports', methods=['GET'])
 def clear_edinet_reports_route():
     """Clear all files in the EDINET reports directory."""
     clear_edinet_reports()
     return jsonify({"status": "EDINET reports cleared."})
 
-@app.route('/clear_rss_reports', methods=['POST'])
+@app.route('/clear_rss_reports', methods=['GET'])
 def clear_rss_reports_route():
     """Clear all files in the RSS feed output directory."""
     clear_rss_reports()
     return jsonify({"status": "RSS reports cleared."})
 
-@app.route('/vectorize_edinet_reports', methods=['POST'])
+@app.route('/vectorize_edinet_reports', methods=['GET'])
 def vectorize_edinet_reports_route():
     """Ingest all text files in the EDINET_reports directory into the vector store."""
+    initial_vector_count = int(index.describe_index_stats().total_vector_count)
     vectorize_edinet_reports()
-    return jsonify({"status": "EDINET reports vectorized."})
+    updated_vector_count = int(index.describe_index_stats().total_vector_count)
+    vectors_added = updated_vector_count - initial_vector_count
+    return jsonify({"status": "EDINET reports vectorized.", "vectors_added": vectors_added})
 
-@app.route('/vectorize_rss_reports', methods=['POST'])
+@app.route('/vectorize_rss_reports', methods=['GET'])
 def vectorize_rss_reports_route():
     """Ingest all text files in the RSS_feed_output directory into the vector store."""
+    initial_vector_count = int(index.describe_index_stats().total_vector_count)
     vectorize_rss_reports()
-    return jsonify({"status": "RSS reports vectorized."})
+    updated_vector_count = int(index.describe_index_stats().total_vector_count)
+    vectors_added = updated_vector_count - initial_vector_count
+    return jsonify({"status": "RSS reports vectorized.", "vectors_added": vectors_added})
 
-@app.route('/answer_question', methods=['POST'])
+@app.route('/answer_question', methods=['GET'])
 def answer_question_route():
     data = request.get_json()
     question = data.get("question", "")
