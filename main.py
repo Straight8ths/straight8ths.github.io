@@ -21,7 +21,7 @@ from langchain_community.document_loaders import DirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.prompts import ChatPromptTemplate
 import hashlib
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template
 from flask_cors import CORS
 import pdfplumber
 import pickle
@@ -31,7 +31,7 @@ CORS(app)
 
 @app.route('/')
 def home():
-    return "Welcome to the information-gathering tool suite!"
+    return render_template('index.html')
 
 ### DIRECTORIES SETUP ###
 # Define base directory
@@ -621,7 +621,7 @@ def vector_db_status_route():
     return jsonify(index_stats)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000) 
+    app.run(debug=True)
 
 # === To delete the Pinecone index, uncomment the following lines ===
 # pc.delete_index(name=index_name)
