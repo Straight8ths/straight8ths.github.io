@@ -28,11 +28,7 @@ import pdfplumber
 import pickle
 
 app = Flask(__name__)
-# CORS(app)
-
-@app.route("/ping")
-def ping():
-    return "pong"
+CORS(app)
 
 @app.route('/', methods=['GET'])
 def home():
