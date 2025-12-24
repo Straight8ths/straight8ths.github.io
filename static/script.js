@@ -1,5 +1,7 @@
-
-const apiBaseUrl = "https://straight8ths-github-io.onrender.com";
+const API_BASE =
+  window.location.hostname === "localhost"
+    ? "http://127.0.0.1:5000"
+    : "https://your-app.onrender.com";
 
 const dropdown = document.getElementById('filingsMode');
 const tickerbox = document.getElementById('tickerbox');
@@ -34,7 +36,7 @@ function download_rss_reports() {
         addLog('ERROR: No news feed selected');
         return;
     }
-    let url = `${apiBaseUrl}/download_rss_reports?report_feed=${report_feed}`;
+    let url = `/download_rss_reports?report_feed=${report_feed}`;
     
     const earliest_date = document.getElementById('dateBox').value;
     if (earliest_date) {
@@ -65,7 +67,7 @@ function vectorize_rss_reports() {
         addLog('ERROR: No news collected to vectorize');
         return;
     }
-    fetch(`${apiBaseUrl}/vectorize_rss_reports`, { method: 'POST' })
+    fetch(`/vectorize_rss_reports`, { method: 'POST' })
         .then(response => response.json())
         .then(data => {
             addLog('Vectorizing collected news...');
@@ -80,7 +82,7 @@ function download_edinet_reports() {
     const mode = document.getElementById('filingsMode').value;
     const ticker = document.getElementById('tickerbox').value;
     const translate = document.getElementById('filingstranslateCheckbox').checked;
-    let url = `${apiBaseUrl}/download_edinet_reports?mode=${mode}`;
+    let url = `/download_edinet_reports?mode=${mode}`;
     
     if (!mode) {
         addLog('ERROR: No report mode selected');
@@ -119,7 +121,7 @@ function vectorize_edinet_reports() {
         addLog('ERROR: No reports collected to vectorize');
         return;
     }
-    fetch(`${apiBaseUrl}/vectorize_edinet_reports`, { method: 'POST' })
+    fetch(`/vectorize_edinet_reports`, { method: 'POST' })
         .then(response => response.json())
         .then(data => {
             addLog('Vectorizing collected reports...');
@@ -161,15 +163,23 @@ function sendMessage() {
 
 function checkVectorDBHealth() {
     addLog('VectorDB health check initiated...');
-    fetch(`${apiBaseUrl}/vector_db_status`, { method: 'GET' })
+
+    fetch("/vector_db_status", { method: 'GET' })
         .then(response => response.json())
         .then(data => {
-            addLog('VectorDB is healthy.');
+            if (data.status === 'healthy') {
+                addLog('VectorDB is healthy and operational.');
+                addLog(`Index stats: ${JSON.stringify(data)}`);
+            } else if (data.status === 'failed') {
+                addLog(`VectorDB health check failed: ${data.error}`);
+            } else {
+                addLog('VectorDB returned unexpected response.');
+            }
         })
-        // Red text for errors
         .catch(error => {
-            addLog('ERROR: VectorDB health check failed.');
+            addLog(`ERROR: Failed to check VectorDB health - ${error}`);
         });
+    return;
 }
 
 document.getElementById('chatInput').addEventListener('keypress', function(e) {

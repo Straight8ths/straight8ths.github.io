@@ -1,4 +1,5 @@
 from pathlib import Path
+import lark
 from tabulate import tabulate
 import edinet_tools
 import os
@@ -62,7 +63,9 @@ RSS_OUTPUT_PATH.mkdir(exist_ok=True)
 # Load environment variables
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
 pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+
 deepl_api_key = os.getenv("DEEPL_API_KEY")
 edinet_api_key = os.getenv("EDINET_API_KEY")
 google_api_key = os.getenv("GOOGLE_API_KEY")
@@ -82,24 +85,8 @@ credentials = Credentials.from_service_account_info(
 )
 gc = gspread.authorize(credentials)
 
-### VECTOR STORE SETUP ###
-index_name = "example-index"
-
-# Create index if it doesn't exist
-if index_name not in pc.list_indexes().names():
-    pc.create_index(
-        name=index_name,
-        dimension=1536,  # OpenAI text-embedding-3-small
-        metric="cosine",
-        spec=ServerlessSpec(
-            cloud="aws",
-            region="us-east-1"
-        )
-    )
-
 index = pc.Index(
     name="example-index",
-    host=os.getenv("PINECONE_HOST")
 )
 
 # Select text splitter, embedding model, and vector store
@@ -116,6 +103,10 @@ vectorstore = PineconeVectorStore(
     index=index,
     embedding=embeddings
 )
+
+llm = ChatOpenAI(
+model="gpt-4o-mini",  # or gpt-4.1 / gpt-4o
+temperature=0)
 
 ### DOCUMENT INGESTION FUNCTIONS ###
 def ingest_document(path: Path):
@@ -532,9 +523,7 @@ def answer_question(question: str):
             f"[Source: {doc.metadata.get('source')}]\n{doc.page_content}"
             for doc in docs        )
 
-    llm = ChatOpenAI(
-    model="gpt-4o-mini",  # or gpt-4.1 / gpt-4o
-    temperature=0)
+
 
     retriever = vectorstore.as_retriever(
         search_type="similarity",
@@ -613,16 +602,21 @@ def answer_question_route():
     answer = answer_question(question)
     return jsonify({"answer": answer})
 
-@app.route('/vector_db_status', methods=['GET'])
+@app.route("/vector_db_status", methods=["GET"])
 def vector_db_status_route():
-    if index is None:
-        return jsonify({"error": "Index not initialized"})
     try:
-        index.describe_index_stats()
+        stats = index.describe_index_stats()
+        # Convert to dictionary for Flask
+        stats_dict = stats.to_dict()  # <-- converts to JSON-serializable dict
+        return jsonify({
+            "status": "healthy",
+            "stats": stats_dict
+        })
     except Exception as e:
-        raise RuntimeError(f"Pinecone init failed: {e}")
-    index_stats = index.describe_index_stats()
-    return jsonify(index_stats)
+        return jsonify({
+            "status": "failed",
+            "error": str(e)
+        })
 
 if __name__ == '__main__':
     app.run(debug=True)

@@ -19,3 +19,4 @@ flask
 flask_cors
 pdfplumber
 gunicorn
+lark
