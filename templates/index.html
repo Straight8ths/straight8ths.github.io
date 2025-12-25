@@ -79,65 +79,38 @@
         justify-content: center;   /* centers the layout horizontally */
         }
 
-        button {
-            padding: 8px 16px;
-            background: #1e5a9e;
-            color: #e8f1fa;
+        .button {
+            --btn-bg: #274871; /* default */
+            --btn-hover-bg: color-mix(in srgb, var(--btn-bg) 70%, white);
+
+            background-color: var(--btn-bg);
+            color: white;
+            padding: 0.4rem 1rem;
             border: none;
-            border-radius: 4px;
+            border-radius: 6px;
             cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
+            transition: background-color 0.3s ease;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+            font-size: 16px;
         }
 
-        button:hover {
-            background: #2870b8;
+        .button:hover {
+            background-color: var(--btn-hover-bg);
         }
-
-        .greenButton {
-            padding: 8px 16px;
-            background: #167f16;
-            color: #e8f1fa;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-        }
-    
-        .greenButton:hover {
-            background: #1a971a;
-        }
-
-
-        .redButton {
-            padding: 8px 16px;
-            background: #c0392b;
-            color: #e8f1fa;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-        }
-        
-        .redButton:hover {
-            background: #e74c3c;
-        }
-
 
         .chat-window {
             height: 400px;
             border: 1px solid #2d4a6f;
             border-radius: 4px;
-            padding: 20px;
+            padding: 5px;
             overflow-y: auto;
             background: #0f1d2e;
             margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
         }
 
         .message {
-            margin-bottom: 12px;
+            margin-bottom: 20px;
             padding: 8px 12px;
             border-radius: 4px;
             max-width: 80%;
@@ -147,11 +120,22 @@
             background: #1e5a9e;
             color: #e8f1fa;
             margin-left: auto;
+            font-size : 14px;
+            margin-bottom: 20px;
+            text-align: right;
+            max-width: 75%;
+            width: fit-content;
         }
 
         .ai-message {
             background: #1a2f4a;
             color: #a8c5e8;
+            margin-right: auto;
+            font-size: 14px;    
+            margin-bottom: 20px;
+            text-align: left;
+            width: fit-content;
+            max-width: 75%;
         }
 
         .chat-input-section {
@@ -167,6 +151,7 @@
             font-size: 14px;
             background: #1a2f4a;
             color: #e8f1fa;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
         }
 
         .logs-section {
@@ -203,7 +188,7 @@
     <div class = "page">
     <div class="layout">
     <div style="margin-bottom: 20px;" class="controls">
-        <h1 style="margin-bottom: 10px; color: #1e3a5f;">Information Gathering Tools</h1>
+        <h1 style="margin-bottom: 10px; color: #1e3a5f; text-shadow: 2px 2px 1px #000000;">Information Gathering Tools</h1>
         <hr style="border: 1px solid #1e3a5f; margin-bottom: 20px;">
             <div class="container" style="margin-bottom: 20px;">
                 <h2 style="margin-bottom: 10px; color: #a8c5e8; font-size: 28px;">Macro and Sector-Level News</h2>
@@ -240,8 +225,8 @@
                                     </label>
                         </div>
                         <div class="control-group">
-                        <button onclick="download_rss_reports()">Collect news</button>
-                        <button onclick="vectorize_rss_reports()" disabled>Add to Vector DB</button>
+                        <button class="button" onclick="download_rss_reports()">Collect news</button>
+                        <button class="button" onclick="vectorize_rss_reports()" disabled>Add to Vector DB</button>
                         </div>
                     </div>
             </div>
@@ -266,30 +251,30 @@
                                 </label>
                         </div>
                         <div class="control-group">
-                        <button onclick="download_edinet_reports()">Collect filings</button>
-                        <button onclick="vectorize_edinet_reports()" disabled>Add to Vector DB</button>
+                        <button class="button" onclick="download_edinet_reports()">Collect filings</button>
+                        <button class="button" onclick="vectorize_edinet_reports()" disabled>Add to Vector DB</button>
                         </div>
                     </div>
 
             
             <div class="container">
-                <button class="greenButton" onclick="checkVectorDBStatus()">Check VectorDB Status</button>
+                <button class="button" style="--btn-bg: #008d28; margin-right: 8px; color: #ffffff" onclick="checkVectorDBStatus()">Check VectorDB Status</button>
                 <button
                     id="clearVectorDBBtn"
                     onclick="confirmClearVectorDB()"
-                    class="redButton"
+                    class="button" style="--btn-bg: #930000; color: #ffffff;"
                 >Clear Vector Database
                 </button>
             </div>
     </div>
     <div style="margin-bottom: 20px;" class="chat">
         <div class="chat-section">
-            <h1 style="margin-bottom: 10px; color: #1e3a5f;">AI Chat</h1>
+            <h1 style="margin-bottom: 10px; color: #1e3a5f; text-shadow: 2px 2px 1px #000000;">AI Chat</h1>
             <hr style="border: 1px solid #1e3a5f; margin-bottom: 20px;">
-            <div class="chat-window" id="chatWindow"></div>
+            <div class="chat-window" style="margin-left: 2px; padding: 20px;" id="chatWindow"></div>
             <div class="chat-input-section">
-                <input type="text" class="chat-input" id="chatInput" placeholder="Type your message here...">
-                <button onclick="sendMessage()">Send</button>
+                <input type="text" style="margin-left: 2px;" class="chat-input" id="chatInput" placeholder="Type your message here...">
+                <button class="button" onclick="sendMessage()">Send</button>
             </div>
         </div>
     </div>
@@ -298,7 +283,7 @@
 
 <div class="page">
     <div style="margin-bottom: 20px;" class="logs-section">
-        <h1 style="margin-bottom: 10px; color: #1e3a5f;">System Logs</h1>
+        <h1 style="margin-bottom: 10px; color: #1e3a5f; text-shadow: 2px 2px 1px #000000;">System Logs</h1>
         <hr style="border: 1px solid #1e3a5f; margin-bottom: 20px;">
         <div class="logs-box" id="logsBox"></div>
     </div>

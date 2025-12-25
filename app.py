@@ -456,7 +456,7 @@ def download_rss_reports(report_feed: str = None, cutoff_date = None, translate:
         sector_real_estate_feeds
     ]
     parameter_list = {
-        "macro_feeds": macro_feeds,
+        "macro": macro_feeds,
         "energy": sector_energy_feeds,
         "materials": sector_materials_feeds,
         "industrials": sector_industrials_feeds,
