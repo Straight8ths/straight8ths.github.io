@@ -21,6 +21,9 @@ from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_community.document_loaders import DirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_classic.memory import ConversationBufferMemory
+from langchain_classic.chains import ConversationalRetrievalChain
 import hashlib
 from flask import Flask, jsonify, request, render_template
 from flask_cors import CORS
@@ -81,8 +84,21 @@ credentials = Credentials.from_service_account_info(
 )
 gc = gspread.authorize(credentials)
 
+index_name = "example-index"
+
+if index_name not in pc.list_indexes().names():
+    pc.create_index(
+        name=index_name,
+        dimension=1536,  # OpenAI text-embedding-3-small
+        metric="cosine",
+        spec=ServerlessSpec(
+            cloud="aws",
+            region="us-east-1"
+        )
+    )
+
 index = pc.Index(
-    name="example-index",
+    name=index_name
 )
 
 # Select text splitter, embedding model, and vector store
@@ -100,9 +116,13 @@ vectorstore = PineconeVectorStore(
     embedding=embeddings
 )
 
+memory = ConversationBufferMemory(
+    return_messages=True
+)
+
 llm = ChatOpenAI(
 model="gpt-4o-mini",  # or gpt-4.1 / gpt-4o
-temperature=0)
+temperature=0.2)
 
 ### DOCUMENT INGESTION FUNCTIONS ###
 def ingest_document(path: Path):
@@ -166,8 +186,7 @@ def ingest_directory(folder: str):
             ingest_document(path)
 
 def edinet_report_downloader(mode: str, ticker: str = None, translate: bool = False) -> None:
-    """Extract recent EDINET filings for companies in our Google Sheet list."""
-    data = request.get_json()
+    """Extract recent EDINET filings for companies in our Google Sheet list."""    
 
     # Core URLs
     portfolio_url = "https://docs.google.com/spreadsheets/d/1oiqGL-ijryNwwpIFhwkimNM24plQOqgSJC-36q08MP4"
@@ -512,7 +531,7 @@ def vectorize_rss_reports():
     clear_rss_reports()
 
 ### QUESTION ANSWERING SETUP ###
-def answer_question(question: str):
+def answer_question_old(question: str):
     
     def format_docs(docs):
         return "\n\n".join(
@@ -544,15 +563,14 @@ def answer_question(question: str):
     )
 
     # 4. Call LLM
-    response = llm.invoke(messages)
+    response = llm(messages)
     return response.content
 
 @app.route('/download_edinet_reports', methods=['GET'])
 def get_edinet_reports():
-    data = request.get_json()
-    mode = data.get("mode", "portfolio")
-    ticker = data.get("ticker", None)
-    translate = data.get("translate", False)
+    mode = request.args.get("mode", "portfolio")
+    ticker = request.args.get("ticker", None)
+    translate = request.args.get("translate", False)
     edinet_report_downloader(mode=mode, ticker=ticker, translate=translate)
     return jsonify({"status": "EDINET reports downloaded."})
 
@@ -594,12 +612,62 @@ def vectorize_rss_reports_route():
     vectors_added = updated_vector_count - initial_vector_count
     return jsonify({"status": "RSS reports vectorized.", "vectors_added": vectors_added})
 
-@app.route('/answer_question', methods=['GET'])
-def answer_question_route():
+@app.route("/chat", methods=["POST"])
+def chat():
     data = request.get_json()
-    question = data.get("question", "")
-    answer = answer_question(question)
-    return jsonify({"answer": answer})
+    user_message = data.get("message", "")
+
+    if not user_message:
+        return jsonify({"error": "No message provided"}), 400
+
+    retriever = vectorstore.as_retriever(
+        search_type="similarity",
+        search_kwargs={"k": 5}    )
+
+    # 1️⃣ Retrieve relevant documents
+    docs = retriever.invoke(user_message)
+    context = "\n\n".join(f"[Source: {doc.metadata.get('source', 'unknown')}]\n{doc.page_content}" for doc in docs)
+
+    # 2️⃣ Build prompt
+    prompt = ChatPromptTemplate.from_messages([
+        (
+            "system",
+            "You are a helpful assistant. Answer the user's question using ONLY the context provided. "
+            "If the answer is not in the context, say 'I don't know.'"
+        ),
+        (
+            "system",
+            "Context:\n{context}"
+        ),
+        (
+            "human",
+            "{question}"
+        )
+    ])
+
+    # 3️⃣ Load conversation history
+    history = memory.load_memory_variables({}).get("history", [])
+
+    # 4️⃣ Build messages
+    messages = prompt.format_messages(
+        context=context,
+        question=user_message
+    )
+
+    # Insert history between system context and current question
+    messages = messages[:2] + history + messages[2:]
+
+    # 5️⃣ Call LLM
+    response = llm.invoke(messages)
+
+    # 6️⃣ Save to memory
+    memory.save_context(
+        {"input": user_message},
+        {"output": response.content}
+    )
+
+    return jsonify({"response": response.content})
+
 
 @app.route("/vector_db_status", methods=["GET"])
 def vector_db_status_route():
@@ -616,6 +684,23 @@ def vector_db_status_route():
             "status": "failed",
             "error": str(e)
         })
+
+@app.route("/clear_vector_db", methods=["POST"])
+def clear_vector_db_route():
+    try:
+        pc.delete_index(name="example-index")
+        pc.create_index(
+            name="example-index",
+            dimension=1536,  # OpenAI text-embedding-3-small
+            metric="cosine",
+            spec=ServerlessSpec(
+                cloud="aws",
+                region="us-east-1"
+            )
+        )
+        return jsonify({"status": "Vector DB cleared."})
+    except Exception as e:
+        return jsonify({"status": "failed", "error": str(e)})
 
 if __name__ == '__main__':
     app.run(debug=True)

@@ -17,6 +17,13 @@
             padding: 20px;
         }
 
+        .layout {
+            display: flex;
+            height: flex;
+            width: 70vw;
+            gap: 20px;
+                    }
+
         .container {
             max-width: 1200px;
             margin: 0 auto;
@@ -26,11 +33,22 @@
             padding: 20px;
         }
 
+        .controls {
+            width: 35vw;
+            }
+
+        .chat {
+            width: 35vw;
+            flex: 1;                /* take remaining space */
+            overflow: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #1c2d44 #0a1628;
+            }
+        
         .controls-section {
             display: flex;
             gap: 30px;
             margin-bottom: 20px;
-            padding-bottom: 20px;
             border-bottom: 2px solid #1e3a5f;
             flex-wrap: wrap;
         }
@@ -56,6 +74,11 @@
             cursor: pointer;
         }
 
+        .page {
+        display: flex;
+        justify-content: center;   /* centers the layout horizontally */
+        }
+
         button {
             padding: 8px 16px;
             background: #1e5a9e;
@@ -67,9 +90,13 @@
             font-weight: 500;
         }
 
-        .greenbutton {
+        button:hover {
+            background: #2870b8;
+        }
+
+        .greenButton {
             padding: 8px 16px;
-            background: #00720f;
+            background: #167f16;
             color: #e8f1fa;
             border: none;
             border-radius: 4px;
@@ -77,14 +104,27 @@
             font-size: 14px;
             font-weight: 500;
         }
-
-        .greenbutton:hover {
-            background: #008912;
+    
+        .greenButton:hover {
+            background: #1a971a;
         }
 
-        button:hover {
-            background: #2870b8;
+
+        .redButton {
+            padding: 8px 16px;
+            background: #c0392b;
+            color: #e8f1fa;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
         }
+        
+        .redButton:hover {
+            background: #e74c3c;
+        }
+
 
         .chat-window {
             height: 400px;
@@ -130,7 +170,9 @@
         }
 
         .logs-section {
-            margin-top: 20px;
+            width: 70vw;
+            scrollbar-width: thin;
+            scrollbar-color: #1c2d44 #0a1628;
         }
 
         .logs-label {
@@ -158,46 +200,56 @@
     </style>
 </head>
 <body>
-    <div style="margin-bottom: 20px;" class="container">
-        <h1 style="margin-bottom: 20px; color: #a8c5e8;">Information Gathering Tools</h1>
+    <div class = "page">
+    <div class="layout">
+    <div style="margin-bottom: 20px;" class="controls">
+        <h1 style="margin-bottom: 10px; color: #1e3a5f;">Information Gathering Tools</h1>
         <hr style="border: 1px solid #1e3a5f; margin-bottom: 20px;">
-            <div class="container">
-                <h2 style="margin-bottom: 20px; color: #a8c5e8; font-size: 28px;">Macro and Sector-Level News</h2>
-                    <div class="control-group">
-                        <label for="newsFeeds">News type:</label>
-                            <select id="newsFeeds" name="newsFeeds">
-                                <option value="">Select news category...</option>
-                                    <optgroup label="Macro News">
-                                        <option value="macro">General Macro</option>
-                                    </optgroup>
-                                    <optgroup label="GICS Sector News">
-                                        <option value="energy">Energy</option>
-                                        <option value="materials">Materials</option>
-                                        <option value="industrials">Industrials</option>
-                                        <option value="consumer_discretionary">Consumer Discretionary</option>
-                                        <option value="consumer_staples">Consumer Staples</option>
-                                        <option value="healthcare">Healthcare</option>
-                                        <option value="financials">Financials</option>
-                                        <option value="information_technology">Information Technology</option>
-                                        <option value="communication_services">Communication Services</option>
-                                        <option value="utilities">Utilities</option>
-                                        <option value="real_estate">Real Estate</option>
-                                    </optgroup>
-                            </select>
-                            <input type="text" id="dateBox" placeholder="Enter cutoff date -> (YYYY-MM-DD)" style="padding: 8px 12px; width: 250px; border: 1px solid #2d4a6f; border-radius: 4px; background: #1a2f4a; color: #e8f1fa; font-size: 14px;">
-                            <label for="newstranslateCheckbox" style="color: #a8c5e8; font-weight: 600;">Translate to English:</label>
-                            <label class="switch">
-                                <input type="checkbox" id="newstranslateCheckbox">
-                                <span class="slider"></span>
-                                </label>
+            <div class="container" style="margin-bottom: 20px;">
+                <h2 style="margin-bottom: 10px; color: #a8c5e8; font-size: 28px;">Macro and Sector-Level News</h2>
+                <hr style="border: 1px solid #1e3a5f; margin-bottom: 20px;">
+                    <div>
+                        <div class="control-group" style="margin-bottom: 10px;">
+                            <label for="newsFeeds">News type:</label>
+                                <select id="newsFeeds" name="newsFeeds">
+                                    <option value="">Select news category...</option>
+                                        <optgroup label="Macro News">
+                                            <option value="macro">General Macro</option>
+                                        </optgroup>
+                                        <optgroup label="GICS Sector News">
+                                            <option value="energy">Energy</option>
+                                            <option value="materials">Materials</option>
+                                            <option value="industrials">Industrials</option>
+                                            <option value="consumer_discretionary">Consumer Discretionary</option>
+                                            <option value="consumer_staples">Consumer Staples</option>
+                                            <option value="healthcare">Healthcare</option>
+                                            <option value="financials">Financials</option>
+                                            <option value="information_technology">Information Technology</option>
+                                            <option value="communication_services">Communication Services</option>
+                                            <option value="utilities">Utilities</option>
+                                            <option value="real_estate">Real Estate</option>
+                                        </optgroup>
+                                </select>
+                                <input type="text" id="dateBox" placeholder="Enter cutoff date -> (YYYY-MM-DD)" style="padding: 8px 12px; width: 250px; border: 1px solid #2d4a6f; border-radius: 4px; background: #1a2f4a; color: #e8f1fa; font-size: 14px;">
+                        </div>
+                        <div class="control-group" style="margin-bottom: 10px;">
+                                <label for="newstranslateCheckbox" style="color: #a8c5e8; font-weight: 600;">Translate to English:</label>
+                                <label class="switch">
+                                    <input type="checkbox" id="newstranslateCheckbox">
+                                    <span class="slider"></span>
+                                    </label>
+                        </div>
+                        <div class="control-group">
                         <button onclick="download_rss_reports()">Collect news</button>
                         <button onclick="vectorize_rss_reports()" disabled>Add to Vector DB</button>
+                        </div>
                     </div>
             </div>
-            <div style="height: 20px;"></div>
-            <div class="container">
-                <h2 style="margin-bottom: 20px; color: #a8c5e8; font-size: 28px;">Company-Specific Filings</h2>
-                    <div class="control-group">
+
+            <div class="container" style="margin-bottom: 20px;">
+                <h2 style="margin-bottom: 10px; color: #a8c5e8; font-size: 28px;">Company-Specific Filings</h2>
+                <hr style="border: 1px solid #1e3a5f; margin-bottom: 20px;">
+                    <div class="control-group" style="margin-bottom: 10px;">
                         <label for="filingsMode">Filings mode:</label>
                         <select id="filingsMode">
                             <option value="">Select mode...</option>
@@ -205,24 +257,34 @@
                             <option value="name_and_comps">Single name & competitors</option>
                         </select>
                         <input type="text" id="tickerbox" placeholder="Enter 4-digit ticker..." disabled style="padding: 8px 12px; border: 1px solid #2d4a6f; border-radius: 4px; background: #1a2f4a; color: #e8f1fa; font-size: 14px;">
+                        </div>
+                        <div class="control-group" style="margin-bottom: 10px;">
                         <label for="filingstranslateCheckbox" style="color: #a8c5e8; font-weight: 600;">Translate to English:</label>
                             <label class="switch">
                                 <input type="checkbox" id="filingstranslateCheckbox">
                                 <span class="slider"></span>
                                 </label>
+                        </div>
+                        <div class="control-group">
                         <button onclick="download_edinet_reports()">Collect filings</button>
                         <button onclick="vectorize_edinet_reports()" disabled>Add to Vector DB</button>
+                        </div>
                     </div>
-            </div>
-            <div style="height: 20px;"></div>
+
+            
             <div class="container">
-                <button class="greenbutton" onclick="checkVectorDBHealth()">Run VectorDB Health Check</button>
+                <button class="greenButton" onclick="checkVectorDBStatus()">Check VectorDB Status</button>
+                <button
+                    id="clearVectorDBBtn"
+                    onclick="confirmClearVectorDB()"
+                    class="redButton"
+                >Clear Vector Database
+                </button>
             </div>
     </div>
-
-    <div style="margin-bottom: 20px;" class="container">
+    <div style="margin-bottom: 20px;" class="chat">
         <div class="chat-section">
-            <h1 style="margin-bottom: 20px; color: #a8c5e8;">AI Chat</h1>
+            <h1 style="margin-bottom: 10px; color: #1e3a5f;">AI Chat</h1>
             <hr style="border: 1px solid #1e3a5f; margin-bottom: 20px;">
             <div class="chat-window" id="chatWindow"></div>
             <div class="chat-input-section">
@@ -231,12 +293,16 @@
             </div>
         </div>
     </div>
+</div>
+</div>
 
-    <div style="margin-bottom: 20px;" class="container">
-        <h1 style="margin-bottom: 20px; color: #a8c5e8;">System Logs</h1>
+<div class="page">
+    <div style="margin-bottom: 20px;" class="logs-section">
+        <h1 style="margin-bottom: 10px; color: #1e3a5f;">System Logs</h1>
         <hr style="border: 1px solid #1e3a5f; margin-bottom: 20px;">
         <div class="logs-box" id="logsBox"></div>
     </div>
+</div>
     <script src="/static/script.js"></script>
 </body>
 </html>

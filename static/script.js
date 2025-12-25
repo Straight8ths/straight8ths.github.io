@@ -81,6 +81,8 @@ function vectorize_rss_reports() {
 
 function download_edinet_reports() {
     const mode = document.getElementById('filingsMode').value;
+    addLog(`Collecting EDINET filings for selected mode: ${mode}`);
+
     const ticker = document.getElementById('tickerbox').value;
     const translate = document.getElementById('filingstranslateCheckbox').checked;
     let url = `/download_edinet_reports?mode=${mode}`;
@@ -104,10 +106,9 @@ function download_edinet_reports() {
     if (translate) {
         url += `&translate=true`;
     }
-    fetch(url, { method: 'POST' })
+    fetch(url, { method: 'GET' })
         .then(response => response.json())
         .then(data => {
-            addLog(`Collecting filings in mode: ${mode}`);
             addLog(`Filings collection complete for mode: ${mode}`);
         })
         .catch(error => {
@@ -122,10 +123,10 @@ function vectorize_edinet_reports() {
         addLog('ERROR: No reports collected to vectorize');
         return;
     }
+    addLog('Starting vectorization of collected reports...');
     fetch(`/vectorize_edinet_reports`, { method: 'GET' })
         .then(response => response.json())
         .then(data => {
-            addLog('Vectorizing collected reports...');
             addLog('Report vectorization complete');
             addLog(`Vectors added: ${data.vectors_added}`);
         })
@@ -134,36 +135,64 @@ function vectorize_edinet_reports() {
         });
 }
 
-function sendMessage() {
-    const input = document.getElementById('chatInput');
-    const message = input.value.trim();
-    
-    if (!message) return;
+function appendMessage(role, text) {
+  const chat = document.getElementById("chatWindow");
 
-    const chatWindow = document.getElementById('chatWindow');
-    
-    const userMsg = document.createElement('div');
-    userMsg.className = 'message user-message';
-    userMsg.textContent = message;
-    chatWindow.appendChild(userMsg);
-    
-    addLog(`User sent message: "${message}"`);
-    
-    input.value = '';
-    
-    setTimeout(() => {
-        const aiMsg = document.createElement('div');
-        aiMsg.className = 'message ai-message';
-        aiMsg.textContent = 'This is a simulated AI response. Connect to an actual AI API for real responses.';
-        chatWindow.appendChild(aiMsg);
-        chatWindow.scrollTop = chatWindow.scrollHeight;
-        addLog('AI response generated');
-    }, 500);
-    
-    chatWindow.scrollTop = chatWindow.scrollHeight;
+  // Create the message container
+  const messageDiv = document.createElement("div");
+  messageDiv.classList.add("message");
+
+  // Assign user or AI styling
+  if (role === "user") {
+    messageDiv.classList.add("user-message");
+  } else {
+    messageDiv.classList.add("ai-message");
+  }
+
+  // Set the message text
+  messageDiv.innerText = text;
+
+  // Append to chat window
+  chat.appendChild(messageDiv);
+
+  // Scroll to the bottom
+  chat.scrollTop = chat.scrollHeight;
 }
 
-function checkVectorDBHealth() {
+async function sendMessage() {
+  const input = document.getElementById("chatInput");
+  const message = input.value.trim();
+  if (!message) return;
+
+  appendMessage("user", message);
+  input.value = "";
+
+  try {
+    const response = await fetch("/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message })
+    });
+    addLog(`User: ${message}`);
+
+    const data = await response.json();
+    appendMessage("ai", data.response);
+    addLog(`AI: ${data.response}`);
+  } catch (err) {
+    appendMessage("ai", "Error: Could not reach server.");
+    console.error(err);
+  }
+}
+
+// Enable Enter key to send
+document.getElementById("chatInput").addEventListener("keypress", function(event) {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    sendMessage();
+  }
+});
+
+function checkVectorDBStatus() {
     addLog('VectorDB health check initiated...');
 
     fetch("/vector_db_status", { method: 'GET' })
@@ -184,10 +213,42 @@ function checkVectorDBHealth() {
     return;
 }
 
-document.getElementById('chatInput').addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
-        sendMessage();
+function confirmClearVectorDB() {
+    const confirmed = confirm(
+        "WARNING\n\n" +
+        "This will permanently delete ALL vectors from the database.\n\n" +
+        "This action CANNOT be undone.\n\n" +
+        "Are you sure you want to continue?"
+    );
+
+    if (!confirmed) {
+        addLog("Vector DB clear cancelled by user.");
+        return;
     }
+
+    clearVectorDB();
+}
+
+function clearVectorDB() {
+    addLog("Clearing Vector DB...");
+
+    fetch("/clear_vector_db", { method: "POST" })
+        .then(response => response.json())
+        .then(data => {
+            addLog(data.status);
+        })
+        .catch(error => {
+            addLog(`ERROR: Failed to clear Vector DB - ${error}`);
+        });
+}
+
+const input = document.getElementById("chatInput");
+
+input.addEventListener("keypress", function(event) {
+  if (event.key === "Enter") {
+    event.preventDefault(); // prevent form submission / new line
+    sendMessage();
+  }
 });
 
 addLog('System initialized');
