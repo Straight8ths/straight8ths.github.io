@@ -624,11 +624,11 @@ def chat():
         search_type="similarity",
         search_kwargs={"k": 5}    )
 
-    # 1️⃣ Retrieve relevant documents
+    # Retrieve relevant documents
     docs = retriever.invoke(user_message)
     context = "\n\n".join(f"[Source: {doc.metadata.get('source', 'unknown')}]\n{doc.page_content}" for doc in docs)
 
-    # 2️⃣ Build prompt
+    # Build prompt
     prompt = ChatPromptTemplate.from_messages([
         (
             "system",
@@ -645,10 +645,10 @@ def chat():
         )
     ])
 
-    # 3️⃣ Load conversation history
+    # Load conversation history
     history = memory.load_memory_variables({}).get("history", [])
 
-    # 4️⃣ Build messages
+    # Build messages
     messages = prompt.format_messages(
         context=context,
         question=user_message
@@ -657,10 +657,10 @@ def chat():
     # Insert history between system context and current question
     messages = messages[:2] + history + messages[2:]
 
-    # 5️⃣ Call LLM
+    # Call LLM
     response = llm.invoke(messages)
 
-    # 6️⃣ Save to memory
+    # Save to memory
     memory.save_context(
         {"input": user_message},
         {"output": response.content}
