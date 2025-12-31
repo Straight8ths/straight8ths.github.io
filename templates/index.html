@@ -19,7 +19,7 @@
 
         .layout {
             display: flex;
-            height: flex;
+            height: 90vh;
             width: 70vw;
             gap: 20px;
                     }
@@ -263,6 +263,15 @@
                         <div class="control-group">
                         <button class="button" onclick="download_edinet_reports()">Collect filings</button>
                         <button class="button" onclick="vectorize_edinet_reports()" disabled>Add to Vector DB</button>
+                        </div>
+                    </div>
+            
+            <div class="container" style="margin-bottom: 20px;">
+                <h2 style="margin-bottom: 10px; color: #a8c5e8; font-size: 28px;">User Documents</h2>
+                <hr style="border: 1px solid #1e3a5f; margin-bottom: 20px;">
+                        <div class="control-group">
+                        <input type="file" id="whitepaperInput" multiple style="color: #e8f1fa;" />
+                        <button class="button" onclick="upload_whitepapers()">Upload and vectorize</button>
                         </div>
                     </div>
 

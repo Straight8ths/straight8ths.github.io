@@ -58,6 +58,9 @@ EDINET_REPORTS_PATH.mkdir(exist_ok=True)
 RSS_OUTPUT_PATH = BASE_DIR / "RSS_feed_output"
 RSS_OUTPUT_PATH.mkdir(exist_ok=True)
 
+WHITEPAPER_PATH = BASE_DIR / "whitepapers"
+WHITEPAPER_PATH.mkdir(exist_ok=True)
+
 ### KEYS AND CLIENTS SETUP ###
 # Load environment variables
 load_dotenv()
@@ -182,7 +185,7 @@ def ingest_directory(folder: str):
     folder_path = Path(folder)
 
     for path in folder_path.iterdir():
-        if path.suffix.lower() in {".txt", ".md"}:
+        if path.suffix.lower() in {".txt", ".pdf"}:
             ingest_document(path)
 
 def edinet_report_downloader(mode: str, ticker: str = None, translate: bool = False) -> None:
@@ -246,7 +249,10 @@ def edinet_report_downloader(mode: str, ticker: str = None, translate: bool = Fa
 
         # Get competitors for the given ticker
         comps = portfolio_df.loc[portfolio_df["Ticker"] == ticker, "Competitors":].values.flatten().tolist()
-        comps = [comp for comp in comps if len(comp) > 0 and " JP" in comp]
+        comps = [comp for comp in comps if
+                 len(comp) > 0
+                 and " JP" in comp
+                 and comp[:4].isnumeric()]
         comps = [comp[:4] for comp in comps]
         name_and_comps = [ticker] + comps
         name_and_comps = pd.DataFrame(name_and_comps, columns=["Ticker"])
@@ -259,7 +265,7 @@ def edinet_report_downloader(mode: str, ticker: str = None, translate: bool = Fa
     for row in filtered_filings_df.itertuples(index=False):
         docID = row.docID
         tickercode = row.secCode
-        Name = row.Name.replace(" ", "_")
+        Name = str(row.Name).replace(" ", "_")
         docType = row.docType
         submitDateTime = row.submitDateTime[:10]
         try:
@@ -530,6 +536,59 @@ def vectorize_rss_reports():
     ingest_directory(RSS_OUTPUT_PATH)
     clear_rss_reports()
 
+ALLOWED_EXTENSIONS = {".pdf", ".txt"}
+
+def clear_whitepapers():
+    """Clear all files in the whitepapers directory."""
+    clear_folder(WHITEPAPER_PATH)
+
+def allowed_file(filename: str) -> bool:
+    ext = os.path.splitext(filename)[1].lower()
+    return ext in ALLOWED_EXTENSIONS
+
+def vectorize_whitepapers():
+    """Ingest all text files in the whitepapers directory into the vector store."""
+    ingest_directory(WHITEPAPER_PATH)
+
+    clear_whitepapers()
+
+@app.route("/vectorize_whitepapers", methods=["POST"])
+def upload_whitepapers():
+    files = request.files.getlist("whitepapers")
+
+    if not files:
+        return jsonify({"error": "No files provided"}), 400
+
+    temp_dir = WHITEPAPER_PATH
+    saved_paths = []
+
+    try:
+        for file in files:
+            filename = os.path.basename(file.filename)
+
+            if not allowed_file(filename):
+                return jsonify({"error": f"Invalid file type: {filename}"}), 400
+
+            file_path = os.path.join(temp_dir, filename)
+            file.save(file_path)
+
+            saved_paths.append(file_path)
+
+        initial_vector_count = int(index.describe_index_stats().total_vector_count)
+
+        vectorize_whitepapers()
+
+        updated_vector_count = int(index.describe_index_stats().total_vector_count)
+        vectors_added = updated_vector_count - initial_vector_count
+
+        return jsonify({
+            "status": "Whitepapers vectorized.",
+            "vectors_added": vectors_added
+        })
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
 ### QUESTION ANSWERING SETUP ###
 def answer_question_old(question: str):
     

@@ -242,6 +242,41 @@ function clearVectorDB() {
         });
 }
 
+async function upload_whitepapers() {
+  const input = document.getElementById("whitepaperInput");
+  const files = input.files;
+
+  if (!files.length) {
+    alert("Select at least one file");
+    return;
+  }
+
+  const formData = new FormData();
+    addLog(`Uploading and vectorizing whitepapers...`);
+
+  for (const file of files) {
+    formData.append("whitepapers", file);
+  }
+
+  const response = await fetch("/vectorize_whitepapers", {
+    method: "POST",
+    body: formData
+    });
+
+  const result = await response.json();
+
+  if (response.status !== 200) {
+    addLog(`ERROR: ${result.error}`);
+    return;
+  }
+  if (result.vectors_added === 0) {
+    addLog(`No new vectors were added. Files may have already been vectorized.`);
+    return;
+  }
+    addLog(`Document vectorization complete`);
+    addLog(`Vectors added: ${result.vectors_added}`);
+}
+
 const input = document.getElementById("chatInput");
 
 input.addEventListener("keypress", function(event) {
