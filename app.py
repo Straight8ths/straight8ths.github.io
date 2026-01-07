@@ -539,10 +539,29 @@ def allowed_file(filename: str) -> bool:
     ext = os.path.splitext(filename)[1].lower()
     return ext in ALLOWED_EXTENSIONS
 
+def ingest_many_documents_safe(items, job_id, bucket):
+    try:
+        saved_paths = []
+
+        for item in items:
+            if isinstance(item, tuple):
+                file, path = item
+                file.save(path)        # SAVE HERE
+                saved_paths.append(path)
+            else:
+                saved_paths.append(item)
+
+        ingest_many_documents(saved_paths, job_id, bucket)
+        JOB_STATUS[job_id]["status"] = "complete"
+
+    except Exception as e:
+        JOB_STATUS[job_id]["status"] = "failed"
+        JOB_STATUS[job_id]["error"] = str(e)
+
 @app.route("/upload", methods=["POST"])
 def upload():
     bucket = request.form.get("bucket", "whitepapers")
-    mode = request.form.get("mode", "file")  # "file" or "directory"
+    mode = request.form.get("mode", "file")
 
     if bucket not in DOCUMENT_BUCKETS:
         return jsonify({"error": "Invalid bucket"}), 400
@@ -556,19 +575,17 @@ def upload():
 
         safe_name = secure_filename(file.filename)
         path = DOCUMENT_BUCKETS[bucket] / f"{job_id}_{safe_name}"
+
+        # ✅ Save immediately (fast)
         file.save(path)
 
         paths = [path]
 
     elif mode == "directory":
-        # Ingest *all files* already in the bucket directory
         paths = [
             p for p in DOCUMENT_BUCKETS[bucket].iterdir()
             if p.is_file() and p.suffix.lower() in {".pdf", ".txt"}
         ]
-
-        if not paths:
-            return jsonify({"error": "No documents found in directory"}), 400
 
     else:
         return jsonify({"error": "Invalid mode"}), 400
@@ -586,7 +603,7 @@ def upload():
         "documents": len(paths)
     })
 
-def ingest_many_documents_safe(paths: list[Path], job_id: str, bucket: str):
+def ingest_many_documents(paths: list[Path], job_id: str, bucket: str):
     JOB_STATUS[job_id] = {
         "status": "running",
         "processed": 0,
@@ -613,7 +630,6 @@ def ingest_many_documents_safe(paths: list[Path], job_id: str, bucket: str):
 
     except Exception as e:
         JOB_STATUS[job_id]["status"] = "failed"
-        JOB_STATUS[job_id]["error"] = str(e)
 
 def ingest_single_document(path: Path, job_id: str, bucket: str):
     text = load_text_file_safe(path)
