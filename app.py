@@ -583,7 +583,7 @@ def upload_whitepapers():
 
         return jsonify({
             "status": "Whitepapers vectorized.",
-            "vectors_added": vectors_added
+            "vectors_added": str(vectors_added)
         })
     
     except Exception as e:
