@@ -263,7 +263,8 @@ async function upload_whitepapers() {
     body: formData
     });
 
-  const result = await response.json();
+    const text = await response.text()
+    console.log("RAW RESPONSE:", text)
 
   if (response.status !== 200) {
     addLog(`ERROR: ${result.error}`);
