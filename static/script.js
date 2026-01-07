@@ -57,26 +57,6 @@ function download_rss_reports() {
         .catch(error => {
             addLog('ERROR: Failed to collect news');
         });
-    // "Add to Vector DB" button becomes clickable
-    document.querySelector('button[onclick="vectorize_rss_reports()"]').disabled = false;
-}
-
-function vectorize_rss_reports() {
-    // Starts out disabled
-    if (document.querySelector('button[onclick="vectorize_rss_reports()"]').disabled) {
-        addLog('ERROR: No news collected to vectorize');
-        return;
-    }
-    fetch(`/vectorize_rss_reports`, { method: 'GET' })
-        .then(response => response.json())
-        .then(data => {
-            addLog('Vectorizing collected news...');
-            addLog('News vectorization complete');
-            addLog(`Vectors added: ${data.vectors_added}`);
-        })
-        .catch(error => {
-            addLog('ERROR: Failed to vectorize news');
-        });
 }
 
 function download_edinet_reports() {
@@ -114,26 +94,8 @@ function download_edinet_reports() {
         .catch(error => {
             addLog('ERROR: Failed to collect filings');
         });
-    // "Add to Vector DB" button becomes clickable
-    document.querySelector('button[onclick="vectorize_edinet_reports()"]').disabled = false;
 }
 
-function vectorize_edinet_reports() {
-    if (document.querySelector('button[onclick="vectorize_edinet_reports()"]').disabled) {
-        addLog('ERROR: No reports collected to vectorize');
-        return;
-    }
-    addLog('Starting vectorization of collected reports...');
-    fetch(`/vectorize_edinet_reports`, { method: 'GET' })
-        .then(response => response.json())
-        .then(data => {
-            addLog('Report vectorization complete');
-            addLog(`Vectors added: ${data.vectors_added}`);
-        })
-        .catch(error => {
-            addLog('ERROR: Failed to vectorize reports');
-        });
-}
 
 function appendMessage(role, text) {
   const chat = document.getElementById("chatWindow");
@@ -183,14 +145,6 @@ async function sendMessage() {
     console.error(err);
   }
 }
-
-// Enable Enter key to send
-document.getElementById("chatInput").addEventListener("keypress", function(event) {
-  if (event.key === "Enter") {
-    event.preventDefault();
-    sendMessage();
-  }
-});
 
 function checkVectorDBStatus() {
     addLog('VectorDB health check initiated...');
@@ -242,47 +196,97 @@ function clearVectorDB() {
         });
 }
 
-async function upload_whitepapers() {
-  const input = document.getElementById("whitepaperInput");
-  const files = input.files;
-
-  if (!files.length) {
-    alert("Select at least one file");
-    return;
-  }
-
+async function uploadFile(file, bucket) {
   const formData = new FormData();
-    addLog(`Uploading and vectorizing whitepapers...`);
+  formData.append("file", file);
+  formData.append("bucket", bucket);
+  formData.append("mode", "file");
 
-  for (const file of files) {
-    formData.append("whitepapers", file);
+  const res = await fetch("/upload", { method: "POST", body: formData });
+  return res.json();
+}
+
+async function ingestDirectory(bucket) {
+  const formData = new FormData();
+  formData.append("bucket", bucket);
+  formData.append("mode", "directory");
+
+  try {
+    const { job_id: jobId } = await fetch("/upload", {
+      method: "POST",
+      body: formData
+    }).then(res => res.json());
+
+    addLog("Processing started...");
+
+    await pollJobStatus(jobId);
+
+    addLog("Ingestion finished. Documents added to vector store.");
+
+  } catch (err) {
+    addLog(`Error: ${err.message}`);
+    alert(err.message);
   }
+}
 
-  const response = await fetch("/vectorize_whitepapers", {
-    method: "POST",
-    body: formData
-    });
+async function handleFileUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
 
-    const data = await response.json();
+  try {
+    const { job_id: jobId } = await uploadFile(file, "whitepapers");
 
-  if (response.status !== 200) {
-    addLog(`ERROR: ${data.error}`);
-    return;
+    // Optional: show immediate feedback
+    addLog("Processing started...");
+
+    // Poll until complete
+    await pollJobStatus(jobId);
+
+    addLog("Ingestion finished. Documents added to vector store.");
+
+  } catch (err) {
+    addLog(`Error: ${err.message}`);
+    alert(err.message);
   }
-  if (data.vectors_added === 0) {
-    addLog(`No new vectors were added. Files may have already been vectorized.`);
-    return;
-  }
-    addLog(`Document vectorization complete`);
-    addLog(`Vectors added: ${data.vectors_added}`);
-    addLog(`Index stats: ${JSON.stringify(data.index_stats)}`);
+}
+
+// Only run if there is an active job
+async function pollJobStatus(jobId, interval = 2000) {
+    if (!jobId) {
+        addLog("No active job to poll.");
+        return;
+    }
+  return new Promise((resolve, reject) => {
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch(`/job/${jobId}`);
+        const data = await res.json();
+
+        addLog(`[${jobId}] status: ${data.status}`);
+
+        if (data.status === "complete") {
+          clearInterval(timer);
+          resolve("Job complete!");
+        } else if (data.status === "failed") {
+          clearInterval(timer);
+          reject(new Error("Job failed"));
+        }
+        // else status is "running" or "unknown" → keep polling
+
+      } catch (err) {
+        clearInterval(timer);
+        reject(err);
+      }
+    }, interval);
+  });
 }
 
 const input = document.getElementById("chatInput");
 
-input.addEventListener("keypress", function(event) {
+// Enable Enter key to send
+document.getElementById("chatInput").addEventListener("keypress", function(event) {
   if (event.key === "Enter") {
-    event.preventDefault(); // prevent form submission / new line
+    event.preventDefault();
     sendMessage();
   }
 });

@@ -29,6 +29,9 @@ from flask import Flask, jsonify, request, render_template
 from flask_cors import CORS
 import pdfplumber
 import pickle
+from threading import Thread
+import uuid
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 CORS(app)
@@ -41,25 +44,16 @@ def home():
 # Define base directory
 BASE_DIR = Path(__file__).resolve().parent
 
-# Create EDINET data directory
-EDINET_DATA_ROOT = Path(os.environ.get("EDINET_DATA_ROOT", BASE_DIR / "EDINET_data"))
-EDINET_DATA_ROOT.mkdir(exist_ok=True)
+BASE_UPLOAD_DIR = BASE_DIR / "uploads"
 
-# Create cache directory and file path
-EDINET_CACHE_DIR = EDINET_DATA_ROOT / "EDINET_cache"
-EDINET_CACHE_DIR.mkdir(exist_ok=True)
-cache_file = EDINET_CACHE_DIR / "data_cache.pkl"
+DOCUMENT_BUCKETS = {
+    "whitepapers": BASE_UPLOAD_DIR / "whitepapers",
+    "reports": BASE_UPLOAD_DIR / "reports",
+    "news": BASE_UPLOAD_DIR / "news",
+}
 
-# Create reports directory
-EDINET_REPORTS_PATH = EDINET_DATA_ROOT / "EDINET_reports"
-EDINET_REPORTS_PATH.mkdir(exist_ok=True)
-
-# Create RSS feed output directory
-RSS_OUTPUT_PATH = BASE_DIR / "RSS_feed_output"
-RSS_OUTPUT_PATH.mkdir(exist_ok=True)
-
-WHITEPAPER_PATH = BASE_DIR / "whitepapers"
-WHITEPAPER_PATH.mkdir(exist_ok=True)
+for path in DOCUMENT_BUCKETS.values():
+    path.mkdir(parents=True, exist_ok=True)
 
 ### KEYS AND CLIENTS SETUP ###
 # Load environment variables
@@ -128,65 +122,83 @@ model="gpt-4o-mini",  # or gpt-4.1 / gpt-4o
 temperature=0.2)
 
 ### DOCUMENT INGESTION FUNCTIONS ###
-def ingest_document(path: Path):
-    def sha256(text: str) -> str:
-        return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
-    def load_text_file(path: Path) -> str:
-        if Path(path).suffix.lower() == ".pdf":
-            with pdfplumber.open(path) as pdf:
-                text = ""
-                for page in pdf.pages:
-                    text += page.extract_text() + "\n"
-            return text
-        else:
-            with open(path, "r", encoding="utf-8") as f:
-                return f.read()
-    
-    # 1. Load
-    whole_text = load_text_file(path)
+# def ingest_directory(bucket: str):
+#     folder_path = DOCUMENT_BUCKETS[bucket]
 
-    # 2. Document-level hash
-    doc_hash = sha256(whole_text)
+#     for path in folder_path.iterdir():
+#         if path.suffix.lower() in {".txt", ".pdf"}:
+#             ingest_many_documents_safe(path, job_id=str(uuid.uuid4()), bucket=bucket)
 
-    # 3. Chunk into Document objects
-    docObjects = splitter.create_documents(
-        [whole_text],
-        metadatas=[{
-            "source": str(path),
-            "doc_hash": doc_hash}]
-    )
+def load_text_file_safe(path: Path) -> str:
+    if path.suffix.lower() == ".pdf":
+        import pdfplumber
+        chunks = []
 
-    # 4. Generate stable IDs (doc + chunk hash)
-    ids = []
-    for doc in docObjects:
-        chunk_hash = sha256(doc.page_content)
-        ids.append(f"{doc_hash}_{chunk_hash}")
+        with pdfplumber.open(path) as pdf:
+            for i, page in enumerate(pdf.pages):
+                try:
+                    text = page.extract_text()
+                    if text:
+                        chunks.append(text)
+                except Exception:
+                    print(f"PDF page {i} failed")
 
-    # Check if IDs are already in the index
-    existing_ids = set()
-    batch_size = 100
-    for i in range(0, len(ids), batch_size):
-        id_batch = ids[i:i + batch_size]
-        query_response = index.fetch(ids=id_batch)
-        existing_ids.update(query_response.vectors.keys())
+        return "\n".join(chunks)
 
-    # Filter out existing documents
-    docObjects = [doc for doc, id_ in zip(docObjects, ids) if id_ not in existing_ids]
-    ids = [id_ for id_ in ids if id_ not in existing_ids]
+    return path.read_text(encoding="utf-8", errors="ignore")
 
-    # 5. Upsert
-    vectorstore.add_documents(
-        documents=docObjects,
-        ids=ids
-    )
+def get_vector_count(index) -> int:
+    stats = index.describe_index_stats()
+    return stats.get("total_vector_count", 0)
 
-def ingest_directory(folder: str):
-    folder_path = Path(folder)
+JOB_STATUS = {}
 
-    for path in folder_path.iterdir():
-        if path.suffix.lower() in {".txt", ".pdf"}:
-            ingest_document(path)
+# def ingest_document_safe(path: Path, job_id: str):
+#     try:
+#         JOB_STATUS[job_id] = {"status": "running"}
+
+#         # PRE-INGEST SNAPSHOT
+#         before_count = get_vector_count(index)
+#         print(f"[{job_id}] vectors before:", before_count)
+
+#         # ---- ingestion work ----
+#         text = load_text_file_safe(path)
+
+#         docs = splitter.create_documents(
+#             [text],
+#             metadatas=[{"source": str(path), "job_id": job_id}]
+#         )
+
+#         ids = [
+#             f"{job_id}_{hashlib.sha256(doc.page_content.encode()).hexdigest()}"
+#             for doc in docs
+#         ]
+
+#         vectorstore.add_documents(documents=docs, ids=ids)
+
+#         # POST-INGEST SNAPSHOT
+#         after_count = get_vector_count(index)
+#         print(f"[{job_id}] vectors after:", after_count)
+
+#         added = max(after_count - before_count, 0)
+
+#         JOB_STATUS[job_id].update({
+#             "status": "complete",
+#             "vectors_added": added,
+#             "before": before_count,
+#             "after": after_count
+#         })
+
+#     except Exception as e:
+#         JOB_STATUS[job_id] = {
+#             "status": "failed",
+#             "error": str(e)
+#         }
+
+@app.route("/job/<job_id>")
+def job_status(job_id):
+    return jsonify(JOB_STATUS.get(job_id, {"status": "unknown"}))
 
 def edinet_report_downloader(mode: str, ticker: str = None, translate: bool = False) -> None:
     """Extract recent EDINET filings for companies in our Google Sheet list."""    
@@ -198,18 +210,8 @@ def edinet_report_downloader(mode: str, ticker: str = None, translate: bool = Fa
     # Pandas settings
     pd.set_option("mode.copy_on_write", True)
 
-    def fetch_data():
-        all_filings_df = pd.DataFrame(client.get_recent_filings(days_back=30))
-        all_filings_df["secCode"] = all_filings_df["secCode"].astype(str).str[:4]
-        return all_filings_df
-
-    if cache_file.exists():
-        with open(cache_file, "rb") as f:
-            all_filings_df = pickle.load(f)
-    else:
-        all_filings_df = fetch_data()
-        with open(cache_file, "wb") as f:
-            pickle.dump(all_filings_df, f)
+    all_filings_df = pd.DataFrame(client.get_recent_filings(days_back=30))
+    all_filings_df["secCode"] = all_filings_df["secCode"].astype(str).str[:4]
 
     # Load portfolio data from Google Sheets into a dataframe
     portfolio_sheet = gc.open_by_url(portfolio_url).sheet1
@@ -271,7 +273,7 @@ def edinet_report_downloader(mode: str, ticker: str = None, translate: bool = Fa
         try:
             parsed = client.download_filing(docID, extract_data=True, doc_type_code=None)
             # Send text blocks to a text file
-            with open(os.path.expanduser(f"{EDINET_REPORTS_PATH}/{Name}_[{tickercode}.T]_{submitDateTime}_{docType}_{docID}_text_blocks.txt"), "w", encoding="utf-8") as f:
+            with open(os.path.expanduser(f"{DOCUMENT_BUCKETS['reports']}/{Name}_[{tickercode}.T]_{submitDateTime}_{docType}_{docID}_text_blocks.txt"), "w", encoding="utf-8") as f:
                 for block in parsed.get("text_blocks", []):
                     blockID = block["id"]
                     title = block["title"]
@@ -477,7 +479,7 @@ def download_rss_reports(report_feed: str = None, cutoff_date = None, translate:
     }
     
     # Make a file if one does not exist
-    filepath = RSS_OUTPUT_PATH / f"rss_feed_output_{datetime.now().strftime('%Y%m%d')}.txt"
+    filepath = BASE_UPLOAD_DIR / "news" / f"rss_feed_output_{datetime.now().strftime('%Y%m%d')}.txt"
 
     report_feed = parameter_list[report_feed]
 
@@ -513,119 +515,6 @@ def download_rss_reports(report_feed: str = None, cutoff_date = None, translate:
                     file.write("====================================\n\n")
     return
 
-def clear_folder(folder_path: Path):
-    for file in folder_path.iterdir():
-        if file.is_file():
-            file.unlink()
-
-def clear_edinet_reports():
-    """Clear all files in the EDINET reports directory."""
-    clear_folder(EDINET_REPORTS_PATH)
-
-def clear_rss_reports():
-    """Clear all files in the RSS feed output directory."""
-    clear_folder(RSS_OUTPUT_PATH)
-
-def vectorize_edinet_reports():
-    """Ingest all text files in the EDINET_reports directory into the vector store."""
-    ingest_directory(EDINET_REPORTS_PATH)
-    clear_edinet_reports()
-
-def vectorize_rss_reports():
-    """Ingest all text files in the RSS_feed_output directory into the vector store."""
-    ingest_directory(RSS_OUTPUT_PATH)
-    clear_rss_reports()
-
-ALLOWED_EXTENSIONS = {".pdf", ".txt"}
-
-def clear_whitepapers():
-    """Clear all files in the whitepapers directory."""
-    clear_folder(WHITEPAPER_PATH)
-
-def allowed_file(filename: str) -> bool:
-    ext = os.path.splitext(filename)[1].lower()
-    return ext in ALLOWED_EXTENSIONS
-
-def vectorize_whitepapers():
-    """Ingest all text files in the whitepapers directory into the vector store."""
-    ingest_directory(WHITEPAPER_PATH)
-
-    clear_whitepapers()
-
-@app.route("/vectorize_whitepapers", methods=["POST"])
-def upload_whitepapers():
-    files = request.files.getlist("whitepapers")
-
-    if not files:
-        return jsonify({"error": "No files provided"}), 400
-
-    temp_dir = WHITEPAPER_PATH
-    saved_paths = []
-
-    try:
-        for file in files:
-            filename = os.path.basename(file.filename)
-
-            if not allowed_file(filename):
-                return jsonify({"error": f"Invalid file type: {filename}"}), 400
-
-            file_path = os.path.join(temp_dir, filename)
-            file.save(file_path)
-
-            saved_paths.append(file_path)
-
-        initial_vector_count = int(index.describe_index_stats().total_vector_count)
-
-        vectorize_whitepapers()
-
-        updated_vector_count = int(index.describe_index_stats().total_vector_count)
-        vectors_added = updated_vector_count - initial_vector_count
-
-        return jsonify({
-            "status": "Whitepapers vectorized.",
-            "vectors_added": vectors_added,
-            "index_stats": index.describe_index_stats().to_dict()
-        })
-    
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-    
-### QUESTION ANSWERING SETUP ###
-def answer_question_old(question: str):
-    
-    def format_docs(docs):
-        return "\n\n".join(
-            f"[Source: {doc.metadata.get('source')}]\n{doc.page_content}"
-            for doc in docs        )
-
-    retriever = vectorstore.as_retriever(
-        search_type="similarity",
-        search_kwargs={"k": 5}    )
-
-    prompt = ChatPromptTemplate.from_messages([
-        (
-            "system",
-            "You are a helpful assistant. Answer the user's question using ONLY the context provided. If the answer is not in the context, say 'I don't know.'"
-        ),
-        (
-            "human",
-            """Context:{context} Question:{question}""")])
-    # 1. Retrieve
-    docs = retriever._get_relevant_documents(question, run_manager=None)
-
-    # 2. Format context
-    context = format_docs(docs)
-
-    # 3. Build prompt
-    messages = prompt.format_messages(
-        context=context,
-        question=question
-    )
-
-    # 4. Call LLM
-    response = llm(messages)
-    return response.content
-
 @app.route('/download_edinet_reports', methods=['GET'])
 def get_edinet_reports():
     mode = request.args.get("mode", "portfolio")
@@ -642,35 +531,149 @@ def get_rss_reports():
     download_rss_reports(report_feed=report_feed, cutoff_date=cutoff_date, translate=translate)
     return jsonify({"status": "RSS reports downloaded."})
 
-@app.route('/clear_edinet_reports', methods=['GET'])
-def clear_edinet_reports_route():
-    """Clear all files in the EDINET reports directory."""
-    clear_edinet_reports()
-    return jsonify({"status": "EDINET reports cleared."})
 
-@app.route('/clear_rss_reports', methods=['GET'])
-def clear_rss_reports_route():
-    """Clear all files in the RSS feed output directory."""
-    clear_rss_reports()
-    return jsonify({"status": "RSS reports cleared."})
 
-@app.route('/vectorize_edinet_reports', methods=['GET'])
-def vectorize_edinet_reports_route():
-    """Ingest all text files in the EDINET_reports directory into the vector store."""
-    initial_vector_count = int(index.describe_index_stats().total_vector_count)
-    vectorize_edinet_reports()
-    updated_vector_count = int(index.describe_index_stats().total_vector_count)
-    vectors_added = updated_vector_count - initial_vector_count
-    return jsonify({"status": "EDINET reports vectorized.", "vectors_added": vectors_added})
+ALLOWED_EXTENSIONS = {".pdf", ".txt"}
 
-@app.route('/vectorize_rss_reports', methods=['GET'])
-def vectorize_rss_reports_route():
-    """Ingest all text files in the RSS_feed_output directory into the vector store."""
-    initial_vector_count = int(index.describe_index_stats().total_vector_count)
-    vectorize_rss_reports()
-    updated_vector_count = int(index.describe_index_stats().total_vector_count)
-    vectors_added = updated_vector_count - initial_vector_count
-    return jsonify({"status": "RSS reports vectorized.", "vectors_added": vectors_added})
+def allowed_file(filename: str) -> bool:
+    ext = os.path.splitext(filename)[1].lower()
+    return ext in ALLOWED_EXTENSIONS
+
+@app.route("/upload", methods=["POST"])
+def upload():
+    bucket = request.form.get("bucket", "whitepapers")
+    mode = request.form.get("mode", "file")  # "file" or "directory"
+
+    if bucket not in DOCUMENT_BUCKETS:
+        return jsonify({"error": "Invalid bucket"}), 400
+
+    job_id = str(uuid.uuid4())
+
+    if mode == "file":
+        file = request.files.get("file")
+        if not file:
+            return jsonify({"error": "No file provided"}), 400
+
+        safe_name = secure_filename(file.filename)
+        path = DOCUMENT_BUCKETS[bucket] / f"{job_id}_{safe_name}"
+        file.save(path)
+
+        paths = [path]
+
+    elif mode == "directory":
+        # Ingest *all files* already in the bucket directory
+        paths = [
+            p for p in DOCUMENT_BUCKETS[bucket].iterdir()
+            if p.is_file() and p.suffix.lower() in {".pdf", ".txt"}
+        ]
+
+        if not paths:
+            return jsonify({"error": "No documents found in directory"}), 400
+
+    else:
+        return jsonify({"error": "Invalid mode"}), 400
+
+    Thread(
+        target=ingest_many_documents_safe,
+        args=(paths, job_id, bucket),
+        daemon=True
+    ).start()
+
+    return jsonify({
+        "status": "Ingestion started",
+        "job_id": job_id,
+        "bucket": bucket,
+        "documents": len(paths)
+    })
+
+def ingest_many_documents_safe(paths: list[Path], job_id: str, bucket: str):
+    JOB_STATUS[job_id] = {
+        "status": "running",
+        "processed": 0,
+        "total": len(paths),
+        "vectors_added": 0
+    }
+
+    try:
+        before_count = get_vector_count(index)
+
+        for path in paths:
+            try:
+                print(f"[{job_id}] START {path.name}")
+                ingest_single_document(path, job_id, bucket)
+                print(f"[{job_id}] DONE {path.name}")
+                JOB_STATUS[job_id]["processed"] += 1
+            except Exception as e:
+                print(f"[{job_id}] failed {path.name}: {e}")
+
+        after_count = get_vector_count(index)
+
+        JOB_STATUS[job_id]["vectors_added"] = after_count - before_count
+        JOB_STATUS[job_id]["status"] = "complete"
+
+    except Exception as e:
+        JOB_STATUS[job_id]["status"] = "failed"
+        JOB_STATUS[job_id]["error"] = str(e)
+
+def ingest_single_document(path: Path, job_id: str, bucket: str):
+    text = load_text_file_safe(path)
+    if not text.strip():
+        return
+
+    docs = splitter.create_documents(
+        [text],
+        metadatas=[{
+            "source": str(path),
+            "bucket": bucket,
+            "job_id": job_id
+        }]
+    )
+
+    ids = [
+        f"{bucket}_{job_id}_{hashlib.sha256(doc.page_content.encode()).hexdigest()}"
+        for doc in docs
+    ]
+
+    vectorstore.add_documents(
+        documents=docs,
+        ids=ids,
+        # namespace=bucket  # optional but recommended
+    )
+
+
+
+@app.route("/vector_db_status", methods=["GET"])
+def vector_db_status_route():
+    try:
+        stats = index.describe_index_stats()
+        # Convert to dictionary for Flask
+        stats_dict = stats.to_dict()  # <-- converts to JSON-serializable dict
+        return jsonify({
+            "status": "healthy",
+            "stats": stats_dict
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "failed",
+            "error": str(e)
+        })
+
+@app.route("/clear_vector_db", methods=["POST"])
+def clear_vector_db_route():
+    try:
+        pc.delete_index(name="example-index")
+        pc.create_index(
+            name="example-index",
+            dimension=1536,  # OpenAI text-embedding-3-small
+            metric="cosine",
+            spec=ServerlessSpec(
+                cloud="aws",
+                region="us-east-1"
+            )
+        )
+        return jsonify({"status": "Vector DB cleared."})
+    except Exception as e:
+        return jsonify({"status": "failed", "error": str(e)})
 
 @app.route("/chat", methods=["POST"])
 def chat():
@@ -728,39 +731,42 @@ def chat():
 
     return jsonify({"response": response.content})
 
+### QUESTION ANSWERING SETUP ###
+def answer_question_old(question: str):
+    
+    def format_docs(docs):
+        return "\n\n".join(
+            f"[Source: {doc.metadata.get('source')}]\n{doc.page_content}"
+            for doc in docs        )
 
-@app.route("/vector_db_status", methods=["GET"])
-def vector_db_status_route():
-    try:
-        stats = index.describe_index_stats()
-        # Convert to dictionary for Flask
-        stats_dict = stats.to_dict()  # <-- converts to JSON-serializable dict
-        return jsonify({
-            "status": "healthy",
-            "stats": stats_dict
-        })
-    except Exception as e:
-        return jsonify({
-            "status": "failed",
-            "error": str(e)
-        })
+    retriever = vectorstore.as_retriever(
+        search_type="similarity",
+        search_kwargs={"k": 5}    )
 
-@app.route("/clear_vector_db", methods=["POST"])
-def clear_vector_db_route():
-    try:
-        pc.delete_index(name="example-index")
-        pc.create_index(
-            name="example-index",
-            dimension=1536,  # OpenAI text-embedding-3-small
-            metric="cosine",
-            spec=ServerlessSpec(
-                cloud="aws",
-                region="us-east-1"
-            )
-        )
-        return jsonify({"status": "Vector DB cleared."})
-    except Exception as e:
-        return jsonify({"status": "failed", "error": str(e)})
+    prompt = ChatPromptTemplate.from_messages([
+        (
+            "system",
+            "You are a helpful assistant. Answer the user's question using ONLY the context provided. If the answer is not in the context, say 'I don't know.'"
+        ),
+        (
+            "human",
+            """Context:{context} Question:{question}""")])
+    # 1. Retrieve
+    docs = retriever._get_relevant_documents(question, run_manager=None)
+
+    # 2. Format context
+    context = format_docs(docs)
+
+    # 3. Build prompt
+    messages = prompt.format_messages(
+        context=context,
+        question=question
+    )
+
+    # 4. Call LLM
+    response = llm(messages)
+    return response.content
+
 
 if __name__ == '__main__':
     app.run(debug=True)
