@@ -263,19 +263,19 @@ async function upload_whitepapers() {
     body: formData
     });
 
-    const text = await response.text()
-    console.log("RAW RESPONSE:", text)
+    const data = await response.json();
 
   if (response.status !== 200) {
-    addLog(`ERROR: ${response.error}`);
+    addLog(`ERROR: ${data.error}`);
     return;
   }
-  if (response.vectors_added === 0) {
+  if (data.vectors_added === 0) {
     addLog(`No new vectors were added. Files may have already been vectorized.`);
     return;
   }
     addLog(`Document vectorization complete`);
-    addLog(`Vectors added: ${response.vectors_added}`);
+    addLog(`Vectors added: ${data.vectors_added}`);
+    addLog(`Index stats: ${JSON.stringify(data.index_stats)}`);
 }
 
 const input = document.getElementById("chatInput");
