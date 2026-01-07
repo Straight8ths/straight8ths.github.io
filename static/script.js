@@ -267,15 +267,15 @@ async function upload_whitepapers() {
     console.log("RAW RESPONSE:", text)
 
   if (response.status !== 200) {
-    addLog(`ERROR: ${result.error}`);
+    addLog(`ERROR: ${response.error}`);
     return;
   }
-  if (result.vectors_added === 0) {
+  if (response.vectors_added === 0) {
     addLog(`No new vectors were added. Files may have already been vectorized.`);
     return;
   }
     addLog(`Document vectorization complete`);
-    addLog(`Vectors added: ${result.vectors_added}`);
+    addLog(`Vectors added: ${response.vectors_added}`);
 }
 
 const input = document.getElementById("chatInput");
