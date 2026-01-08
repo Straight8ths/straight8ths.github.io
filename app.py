@@ -126,7 +126,7 @@ memory = ConversationBufferMemory(
 
 llm = ChatOpenAI(
 model="gpt-4o-mini",  # or gpt-4.1 / gpt-4o
-temperature=0.2)
+temperature=0.4)
 
 
 
