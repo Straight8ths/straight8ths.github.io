@@ -146,10 +146,8 @@ def reports_handler():
 
 def collect_reports(mode: str, ticker: str = None, translate: bool = False, job_id: str = None) -> None:
     """Extract recent EDINET filings for companies in our Google Sheet list."""
-    JOB_STATUS[job_id] = {
-        "status": "running",
-        "progress": 0
-    }
+    JOB_STATUS[job_id]["status"] = "running"
+    JOB_STATUS[job_id]["progress"] = 0
 
     # Core URLs
     portfolio_url = "https://docs.google.com/spreadsheets/d/1oiqGL-ijryNwwpIFhwkimNM24plQOqgSJC-36q08MP4"
@@ -257,10 +255,8 @@ def news_handler():
 
 def collect_news(report_feed: str = None, earliest_date = None, translate: bool = False, job_id: str = None) -> None:
     """Collect news from RSS feeds and save to a text file."""
-    JOB_STATUS[job_id] = {
-        "status": "running",
-        "progress": 0
-    }
+    JOB_STATUS[job_id]["status"] = "running"
+    JOB_STATUS[job_id]["progress"] = 0
 
     macro_english = {
         "Yomiuri_Business": "https://japannews.yomiuri.co.jp/business/feed/",
@@ -496,7 +492,15 @@ def allowed_file(filename: str) -> bool:
 
 @app.route("/job/<job_id>")
 def job_status(job_id):
-    return jsonify(JOB_STATUS.get(job_id, {"status": "unknown"}))
+    job = JOB_STATUS.get(job_id)
+
+    if not job:
+        return jsonify({
+            "status": "unknown",
+            "error": "Job not found"
+        }), 404
+
+    return jsonify(job)
 
 def get_vector_count(index) -> int:
     stats = index.describe_index_stats()
@@ -545,13 +549,6 @@ def ingest_single_document(path: Path, job_id: str, bucket: str):
     )
 
 def ingest_many_documents(paths: list[Path], job_id: str, bucket: str):
-    JOB_STATUS[job_id] = {
-        "status": "running",
-        "processed": 0,
-        "total": len(paths),
-        "vectors_added": 0
-    }
-
     try:
         before_count = get_vector_count(index)
 
@@ -570,11 +567,16 @@ def ingest_many_documents(paths: list[Path], job_id: str, bucket: str):
         JOB_STATUS[job_id]["status"] = "complete"
 
     except Exception as e:
-        JOB_STATUS[job_id]["status"] = "failed"
-        print(f"[{job_id}] ingestion failed: {e}")
+        JOB_STATUS[job_id]["status"] = "error"
+        JOB_STATUS[job_id]["error"] = str(e)
 
 def ingest_many_documents_safe(items, job_id, bucket):
     try:
+        JOB_STATUS[job_id]["status"] = "running"
+        JOB_STATUS[job_id]["processed"] = 0
+        JOB_STATUS[job_id]["vectors_added"] = 0
+        JOB_STATUS[job_id]["error"] = None
+
         saved_paths = []
 
         for item in items:
@@ -604,8 +606,8 @@ def ingest_many_documents_safe(items, job_id, bucket):
                 print(f"Failed to delete {download_file}: {e}")
 
     except Exception as e:
-        JOB_STATUS[job_id]["status"] = "failed"
-        print(f"[{job_id}] ingestion failed: {e}")
+        JOB_STATUS[job_id]["status"] = "error"
+        JOB_STATUS[job_id]["error"] = str(e)
 
 @app.route("/upload", methods=["POST"])
 def upload():
@@ -616,6 +618,15 @@ def upload():
         return jsonify({"error": "Invalid bucket"}), 400
 
     job_id = str(uuid.uuid4())
+
+    JOB_STATUS[job_id] = {
+        "status": "queued",
+        "error": None,
+        "bucket": bucket,
+        "started_at": time.time(),
+        "processed": 0,
+        "vectors_added": 0
+}
 
     if mode == "file":
         file = request.files.get("file")
