@@ -471,13 +471,13 @@ def collect_news(report_feed: str = None, earliest_date = None, translate: bool 
                         if formatted_time and (formatted_time >= earliest_date):
                             file.write(f"Published: {formatted_time}\n")
                             if 'title' in entry and entry.title:
-                                if i == report_feed[1] and translate: # Japanese feeds
+                                if i == report_feed[1] and translate is True: # Japanese feeds
                                     title = deepl_client.translate_text(entry.title, target_lang="EN-US").text
                                     file.write(f"Title: {title}\n")
                                 else:
                                     file.write(f"Title: {entry.title}\n")
                             if 'summary' in entry and entry.summary:
-                                if i == report_feed[1] and translate: # Japanese feeds
+                                if i == report_feed[1] and translate is True: # Japanese feeds
                                     summary = deepl_client.translate_text(entry.summary, target_lang="EN-US").text
                                     file.write(f"Summary: {summary}\n")
                                 else:
