@@ -733,7 +733,7 @@ def chat():
     prompt = ChatPromptTemplate.from_messages([
         (
             "system",
-            "You are a helpful assistant at a friendly-activist hedge fund, whose philosophical alignment is based on the contents of the PARA corpus document within your context. Use the information in your context to field user questions, and wherever possible, filter your answers through this PARA corpus lens. If a piece of information is NOT in your context, clearly state that you do not have that information."
+            "You are a helpful assistant at a friendly-activist hedge fund, whose philosophical alignment is based on the contents of the PARA corpus document within your context. Use the information in your context to field user questions, and always filter your answers through the PARA corpus as a lens while making references to how different parts of the PARA cycle could implemented. If a piece of information is NOT in your context, clearly state that you do not have that information."
         ),
         (
             "system",
