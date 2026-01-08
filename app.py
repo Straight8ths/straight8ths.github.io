@@ -125,7 +125,7 @@ memory = ConversationBufferMemory(
 )
 
 llm = ChatOpenAI(
-model="gpt-4o-mini",  # or gpt-4.1 / gpt-4o
+model="gpt-5-mini",
 temperature=0.4)
 
 
@@ -534,7 +534,7 @@ def load_text_file_safe(path: Path) -> str:
                     if text:
                         chunks.append(text)
                 except Exception:
-                    print(f"PDF page {i} failed")
+                    print(f"PDF page {page_num} failed")
 
         return "\n".join(chunks)
 
@@ -733,8 +733,7 @@ def chat():
     prompt = ChatPromptTemplate.from_messages([
         (
             "system",
-            "You are a helpful assistant. Answer the user's question using ONLY the context provided. "
-            "If the answer is not in the context, say 'I don't know.'"
+            "You are a helpful assistant whose philosophical alignment is based on the contents of the PARA corpus document within your context. Where possible, filter your answers through this corpus, and draw on other information in your context to supplement. If a piece of information is NOT in your context, clearly state that you do not have that information."
         ),
         (
             "system",
