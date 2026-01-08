@@ -32,6 +32,7 @@ import pickle
 from threading import Thread, Lock
 import uuid
 from werkzeug.utils import secure_filename
+import pymupdf
 
 app = Flask(__name__)
 CORS(app)
@@ -523,14 +524,14 @@ def get_vector_count(index) -> int:
 
 def load_text_file_safe(path: Path) -> str:
     if path.suffix.lower() == ".pdf":
-        import pdfplumber
         chunks = []
 
-        with pdfplumber.open(path) as pdf:
-            for i, page in enumerate(pdf.pages):
+        with pymupdf.open(path) as pdf:
+            for page_num in range(len(pdf)):
+                page = pdf.load_page(page_num)
                 try:
-                    text = page.extract_text()
-                    time.sleep(0.1)  # Be gentle on large PDFs
+                    text = page.get_text()
+                    time.sleep(0)  # Be gentle on large PDFs
                     if text:
                         chunks.append(text)
                 except Exception:

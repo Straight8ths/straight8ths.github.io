@@ -20,3 +20,4 @@ flask_cors
 pdfplumber
 gunicorn
 lark
+PyMuPDF
