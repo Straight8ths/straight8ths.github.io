@@ -30,72 +30,70 @@ function addLog(message) {
     logsBox.scrollTop = logsBox.scrollHeight;
 }
 
-function download_rss_reports() {
-    const report_feed = document.getElementById('newsFeeds').value;
-    if (!report_feed) {
-        addLog('ERROR: No news feed selected');
-        return;
-    }
-    let url = `/download_rss_reports?report_feed=${report_feed}`;
-    
-    const earliest_date = document.getElementById('dateBox').value;
-    if (earliest_date) {
-        url += `&earliest_date=${earliest_date}`;
-    }
 
-    const translate = document.getElementById('newstranslateCheckbox').checked;
-    if (translate) {
-        url += `&translate=true`;
-    }
+async function newsHandler(){
+  try {
+    const { job_id: jobId } = await collectNews();
 
-    fetch(url, { method: 'GET' })
-        .then(response => response.json())
-        .then(data => {
-            addLog(`Collecting news from: ${report_feed}`);
-            addLog(`News collection complete for ${report_feed}`);
-        })
-        .catch(error => {
-            addLog('ERROR: Failed to collect news');
-        });
+    // Optional: show immediate feedback
+    addLog("News collection started...");
+
+    // Poll until complete
+    await pollJobStatus(jobId);
+
+    addLog("News collection finished.");
+
+  } catch (err) {
+    addLog(`Error: ${err.message}`);
+    alert(err.message);
+  }
 }
 
-function download_edinet_reports() {
-    const mode = document.getElementById('filingsMode').value;
-    addLog(`Collecting EDINET filings for selected mode: ${mode}`);
+async function collectNews() {
+  const report_feed = document.getElementById('newsFeeds').value;
+  const earliest_date = document.getElementById('dateBox').value;
+  const translate = document.getElementById('newstranslateCheckbox').checked;
+  
+  const formData = new FormData();
+  formData.append("report_feed", report_feed);
+  formData.append("earliest_date", earliest_date);
+  formData.append("translate", translate);
 
-    const ticker = document.getElementById('tickerbox').value;
-    const translate = document.getElementById('filingstranslateCheckbox').checked;
-    let url = `/download_edinet_reports?mode=${mode}`;
-    
-    if (!mode) {
-        addLog('ERROR: No report mode selected');
-        return;
-    }
-    if (mode === 'name_and_comps') {
-        if (!ticker) {
-            addLog('ERROR: No ticker provided for single name & competitors mode');
-            return;
-        }
-        url += `&ticker=${ticker}`;
-    }
-    if (mode === 'portfolio') {
-        addLog('Collecting filings for portfolio mode...');
-    } else {
-        addLog(`Collecting filings for ticker: ${ticker} and its competitors...`);
-    }
-    if (translate) {
-        url += `&translate=true`;
-    }
-    fetch(url, { method: 'GET' })
-        .then(response => response.json())
-        .then(data => {
-            addLog(`Filings collection complete for mode: ${mode}`);
-        })
-        .catch(error => {
-            addLog('ERROR: Failed to collect filings');
-        });
+  const res = await fetch("/news_handler", { method: "POST", body: formData });
+  return res.json();
 }
 
+async function reportsHandler(){
+  try {
+    const { job_id: jobId } = await collectReports();
+
+    // Optional: show immediate feedback
+    addLog("Report collection started...");
+
+    // Poll until complete
+    await pollJobStatus(jobId);
+
+    addLog("Report collection finished.");
+
+  } catch (err) {
+    addLog(`Error: ${err.message}`);
+    alert(err.message);
+  }
+}
+
+async function collectReports() {
+  const mode = document.getElementById('filingsMode').value;
+  const ticker = document.getElementById('tickerbox').value;
+  const translate = document.getElementById('filingstranslateCheckbox').checked;
+
+  const formData = new FormData();
+  formData.append("mode", mode);
+  formData.append("ticker", ticker);
+  formData.append("translate", translate);
+
+  const res = await fetch("/reports_handler", { method: "POST", body: formData });
+  return res.json();
+}
 
 function appendMessage(role, text) {
   const chat = document.getElementById("chatWindow");

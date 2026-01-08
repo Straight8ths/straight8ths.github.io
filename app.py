@@ -55,6 +55,11 @@ DOCUMENT_BUCKETS = {
 for path in DOCUMENT_BUCKETS.values():
     path.mkdir(parents=True, exist_ok=True)
 
+### DOCUMENT INGESTION FUNCTIONS ###
+JOB_STATUS = {}
+
+ALLOWED_EXTENSIONS = {".pdf", ".txt"}
+
 ### KEYS AND CLIENTS SETUP ###
 # Load environment variables
 load_dotenv()
@@ -121,87 +126,30 @@ llm = ChatOpenAI(
 model="gpt-4o-mini",  # or gpt-4.1 / gpt-4o
 temperature=0.2)
 
-### DOCUMENT INGESTION FUNCTIONS ###
 
-# def ingest_directory(bucket: str):
-#     folder_path = DOCUMENT_BUCKETS[bucket]
 
-#     for path in folder_path.iterdir():
-#         if path.suffix.lower() in {".txt", ".pdf"}:
-#             ingest_many_documents_safe(path, job_id=str(uuid.uuid4()), bucket=bucket)
+@app.route('/reports_handler', methods=['POST'])
+def reports_handler():
+    mode = request.form.get("mode", "portfolio")
+    ticker = request.form.get("ticker", None)
+    translate = request.form.get("translate", False)
 
-def load_text_file_safe(path: Path) -> str:
-    if path.suffix.lower() == ".pdf":
-        import pdfplumber
-        chunks = []
+    job_id = str(uuid.uuid4())
 
-        with pdfplumber.open(path) as pdf:
-            for i, page in enumerate(pdf.pages):
-                try:
-                    text = page.extract_text()
-                    if text:
-                        chunks.append(text)
-                except Exception:
-                    print(f"PDF page {i} failed")
+    # Open a thread
+    Thread(target=collect_reports, kwargs={"mode": mode, "ticker": ticker, "translate": translate, "job_id": job_id}).start()
 
-        return "\n".join(chunks)
+    return jsonify({
+        "status": "Reports download started.",
+        "job_id": job_id
+    })
 
-    return path.read_text(encoding="utf-8", errors="ignore")
-
-def get_vector_count(index) -> int:
-    stats = index.describe_index_stats()
-    return stats.get("total_vector_count", 0)
-
-JOB_STATUS = {}
-
-# def ingest_document_safe(path: Path, job_id: str):
-#     try:
-#         JOB_STATUS[job_id] = {"status": "running"}
-
-#         # PRE-INGEST SNAPSHOT
-#         before_count = get_vector_count(index)
-#         print(f"[{job_id}] vectors before:", before_count)
-
-#         # ---- ingestion work ----
-#         text = load_text_file_safe(path)
-
-#         docs = splitter.create_documents(
-#             [text],
-#             metadatas=[{"source": str(path), "job_id": job_id}]
-#         )
-
-#         ids = [
-#             f"{job_id}_{hashlib.sha256(doc.page_content.encode()).hexdigest()}"
-#             for doc in docs
-#         ]
-
-#         vectorstore.add_documents(documents=docs, ids=ids)
-
-#         # POST-INGEST SNAPSHOT
-#         after_count = get_vector_count(index)
-#         print(f"[{job_id}] vectors after:", after_count)
-
-#         added = max(after_count - before_count, 0)
-
-#         JOB_STATUS[job_id].update({
-#             "status": "complete",
-#             "vectors_added": added,
-#             "before": before_count,
-#             "after": after_count
-#         })
-
-#     except Exception as e:
-#         JOB_STATUS[job_id] = {
-#             "status": "failed",
-#             "error": str(e)
-#         }
-
-@app.route("/job/<job_id>")
-def job_status(job_id):
-    return jsonify(JOB_STATUS.get(job_id, {"status": "unknown"}))
-
-def edinet_report_downloader(mode: str, ticker: str = None, translate: bool = False) -> None:
-    """Extract recent EDINET filings for companies in our Google Sheet list."""    
+def collect_reports(mode: str, ticker: str = None, translate: bool = False, job_id: str = None) -> None:
+    """Extract recent EDINET filings for companies in our Google Sheet list."""
+    JOB_STATUS[job_id] = {
+        "status": "running",
+        "progress": 0
+    }
 
     # Core URLs
     portfolio_url = "https://docs.google.com/spreadsheets/d/1oiqGL-ijryNwwpIFhwkimNM24plQOqgSJC-36q08MP4"
@@ -278,18 +226,42 @@ def edinet_report_downloader(mode: str, ticker: str = None, translate: bool = Fa
                     blockID = block["id"]
                     title = block["title"]
                     content = block["content"]
-                    if translate:
+                    if translate == True:
                         title = deepl_client.translate_text(title, target_lang="EN-US")
                         content = deepl_client.translate_text(content, target_lang="EN-US")
                     f.write(f"{str(blockID)}\n")
                     f.write(f"{str(title)}\n")
                     f.write(f"{str(content)}\n")
                     f.write("\n")
+            JOB_STATUS[job_id]["progress"] += 1
         except Exception as e:
             error_reports.append(docID)
+    JOB_STATUS[job_id]["status"] = "complete"
     return
     
-def download_rss_reports(report_feed: str = None, cutoff_date = None, translate: bool = False) -> None:
+@app.route('/news_handler', methods=['POST'])
+def news_handler():
+    report_feed = request.form.get("report_feed", "macro_feeds")
+    earliest_date = request.form.get("earliest_date", "2023-01-01")
+    translate = request.form.get("translate", False)
+
+    job_id = str(uuid.uuid4())
+
+    # Open a thread
+    Thread(target=collect_news, kwargs={"report_feed": report_feed, "earliest_date": earliest_date, "translate": translate, "job_id": job_id}).start()
+
+    return jsonify({
+        "status": "News download started.",
+        "job_id": job_id
+    })
+
+def collect_news(report_feed: str = None, earliest_date = None, translate: bool = False, job_id: str = None) -> None:
+    """Collect news from RSS feeds and save to a text file."""
+    JOB_STATUS[job_id] = {
+        "status": "running",
+        "progress": 0
+    }
+
     macro_english = {
         "Yomiuri_Business": "https://japannews.yomiuri.co.jp/business/feed/",
         "Yomiuri_Economy": "https://japannews.yomiuri.co.jp/business/economy/feed",
@@ -483,6 +455,7 @@ def download_rss_reports(report_feed: str = None, cutoff_date = None, translate:
 
     report_feed = parameter_list[report_feed]
 
+
     # Download RSS feeds and write to file
     with open(os.path.expanduser(filepath), "w") as file:
         for i in report_feed:
@@ -495,7 +468,7 @@ def download_rss_reports(report_feed: str = None, cutoff_date = None, translate:
                             formatted_time = time.strftime('%Y-%m-%d', entry.published_parsed)
                         if 'updated' in entry and entry.updated:
                             formatted_time = time.strftime('%Y-%m-%d', entry.updated_parsed)
-                        if formatted_time and (formatted_time >= cutoff_date):
+                        if formatted_time and (formatted_time >= earliest_date):
                             file.write(f"Published: {formatted_time}\n")
                             if 'title' in entry and entry.title:
                                 if i == report_feed[1] and translate: # Japanese feeds
@@ -513,95 +486,63 @@ def download_rss_reports(report_feed: str = None, cutoff_date = None, translate:
                                 file.write(f"Link: {entry.link}\n")
                             file.write("\n")
                     file.write("====================================\n\n")
+                    JOB_STATUS[job_id]["progress"] += 1
+    JOB_STATUS[job_id]["status"] = "complete"
     return
-
-@app.route('/download_edinet_reports', methods=['GET'])
-def get_edinet_reports():
-    mode = request.args.get("mode", "portfolio")
-    ticker = request.args.get("ticker", None)
-    translate = request.args.get("translate", False)
-    edinet_report_downloader(mode=mode, ticker=ticker, translate=translate)
-    return jsonify({"status": "EDINET reports downloaded."})
-
-@app.route('/download_rss_reports', methods=['GET'])
-def get_rss_reports():
-    report_feed = request.args.get("report_feed", "macro_feeds")
-    cutoff_date = request.args.get("earliest_date", "2023-01-01")
-    translate = request.args.get("translate", False)
-    download_rss_reports(report_feed=report_feed, cutoff_date=cutoff_date, translate=translate)
-    return jsonify({"status": "RSS reports downloaded."})
-
-
-
-ALLOWED_EXTENSIONS = {".pdf", ".txt"}
 
 def allowed_file(filename: str) -> bool:
     ext = os.path.splitext(filename)[1].lower()
     return ext in ALLOWED_EXTENSIONS
 
-def ingest_many_documents_safe(items, job_id, bucket):
-    try:
-        saved_paths = []
+@app.route("/job/<job_id>")
+def job_status(job_id):
+    return jsonify(JOB_STATUS.get(job_id, {"status": "unknown"}))
 
-        for item in items:
-            if isinstance(item, tuple):
-                file, path = item
-                file.save(path)        # SAVE HERE
-                saved_paths.append(path)
-            else:
-                saved_paths.append(item)
+def get_vector_count(index) -> int:
+    stats = index.describe_index_stats()
+    return stats.get("total_vector_count", 0)
 
-        ingest_many_documents(saved_paths, job_id, bucket)
-        JOB_STATUS[job_id]["status"] = "complete"
+def load_text_file_safe(path: Path) -> str:
+    if path.suffix.lower() == ".pdf":
+        import pdfplumber
+        chunks = []
 
-    except Exception as e:
-        JOB_STATUS[job_id]["status"] = "failed"
-        JOB_STATUS[job_id]["error"] = str(e)
+        with pdfplumber.open(path) as pdf:
+            for i, page in enumerate(pdf.pages):
+                try:
+                    text = page.extract_text()
+                    if text:
+                        chunks.append(text)
+                except Exception:
+                    print(f"PDF page {i} failed")
 
-@app.route("/upload", methods=["POST"])
-def upload():
-    bucket = request.form.get("bucket", "whitepapers")
-    mode = request.form.get("mode", "file")
+        return "\n".join(chunks)
 
-    if bucket not in DOCUMENT_BUCKETS:
-        return jsonify({"error": "Invalid bucket"}), 400
+    return path.read_text(encoding="utf-8", errors="ignore")
 
-    job_id = str(uuid.uuid4())
+def ingest_single_document(path: Path, job_id: str, bucket: str):
+    text = load_text_file_safe(path)
+    if not text.strip():
+        return
 
-    if mode == "file":
-        file = request.files.get("file")
-        if not file:
-            return jsonify({"error": "No file provided"}), 400
+    docs = splitter.create_documents(
+        [text],
+        metadatas=[{
+            "source": str(path),
+            "bucket": bucket,
+            "job_id": job_id
+        }]
+    )
 
-        safe_name = secure_filename(file.filename)
-        path = DOCUMENT_BUCKETS[bucket] / f"{job_id}_{safe_name}"
+    ids = [
+        f"{bucket}_{job_id}_{hashlib.sha256(doc.page_content.encode()).hexdigest()}"
+        for doc in docs
+    ]
 
-        # ✅ Save immediately (fast)
-        file.save(path)
-
-        paths = [path]
-
-    elif mode == "directory":
-        paths = [
-            p for p in DOCUMENT_BUCKETS[bucket].iterdir()
-            if p.is_file() and p.suffix.lower() in {".pdf", ".txt"}
-        ]
-
-    else:
-        return jsonify({"error": "Invalid mode"}), 400
-
-    Thread(
-        target=ingest_many_documents_safe,
-        args=(paths, job_id, bucket),
-        daemon=True
-    ).start()
-
-    return jsonify({
-        "status": "Ingestion started",
-        "job_id": job_id,
-        "bucket": bucket,
-        "documents": len(paths)
-    })
+    vectorstore.add_documents(
+        documents=docs,
+        ids=ids
+    )
 
 def ingest_many_documents(paths: list[Path], job_id: str, bucket: str):
     JOB_STATUS[job_id] = {
@@ -630,33 +571,85 @@ def ingest_many_documents(paths: list[Path], job_id: str, bucket: str):
 
     except Exception as e:
         JOB_STATUS[job_id]["status"] = "failed"
+        print(f"[{job_id}] ingestion failed: {e}")
 
-def ingest_single_document(path: Path, job_id: str, bucket: str):
-    text = load_text_file_safe(path)
-    if not text.strip():
-        return
+def ingest_many_documents_safe(items, job_id, bucket):
+    try:
+        saved_paths = []
 
-    docs = splitter.create_documents(
-        [text],
-        metadatas=[{
-            "source": str(path),
-            "bucket": bucket,
-            "job_id": job_id
-        }]
-    )
+        for item in items:
+            if isinstance(item, tuple):
+                file, path = item
+                file.save(path)
+                saved_paths.append(path)
+            else:
+                saved_paths.append(item)
 
-    ids = [
-        f"{bucket}_{job_id}_{hashlib.sha256(doc.page_content.encode()).hexdigest()}"
-        for doc in docs
-    ]
+        ingest_many_documents(saved_paths, job_id, bucket)
+        JOB_STATUS[job_id]["status"] = "complete"
 
-    vectorstore.add_documents(
-        documents=docs,
-        ids=ids,
-        # namespace=bucket  # optional but recommended
-    )
+        for path in saved_paths:
+            if path.parent == DOCUMENT_BUCKETS[bucket]:
+                try:
+                    path.unlink()
+                except Exception as e:
+                    print(f"Failed to delete {path}: {e}")
+        
+        # Also empty the downloads folder
+        downloads_dir = BASE_DIR / "downloads"
+        for download_file in downloads_dir.iterdir():
+            try:
+                download_file.unlink()
+            except Exception as e:
+                print(f"Failed to delete {download_file}: {e}")
 
+    except Exception as e:
+        JOB_STATUS[job_id]["status"] = "failed"
+        print(f"[{job_id}] ingestion failed: {e}")
 
+@app.route("/upload", methods=["POST"])
+def upload():
+    bucket = request.form.get("bucket", "whitepapers")
+    mode = request.form.get("mode", "file")
+
+    if bucket not in DOCUMENT_BUCKETS:
+        return jsonify({"error": "Invalid bucket"}), 400
+
+    job_id = str(uuid.uuid4())
+
+    if mode == "file":
+        file = request.files.get("file")
+        if not file:
+            return jsonify({"error": "No file provided"}), 400
+
+        safe_name = secure_filename(file.filename)
+        path = DOCUMENT_BUCKETS[bucket] / f"{job_id}_{safe_name}"
+
+        file.save(path)
+
+        paths = [path]
+
+    elif mode == "directory":
+        paths = [
+            p for p in DOCUMENT_BUCKETS[bucket].iterdir()
+            if p.is_file() and p.suffix.lower() in {".pdf", ".txt"}
+        ]
+
+    else:
+        return jsonify({"error": "Invalid mode"}), 400
+
+    Thread(
+        target=ingest_many_documents_safe,
+        args=(paths, job_id, bucket),
+        daemon=True
+    ).start()
+
+    return jsonify({
+        "status": "Ingestion started",
+        "job_id": job_id,
+        "bucket": bucket,
+        "documents": len(paths)
+    })
 
 @app.route("/vector_db_status", methods=["GET"])
 def vector_db_status_route():
@@ -746,43 +739,6 @@ def chat():
     )
 
     return jsonify({"response": response.content})
-
-### QUESTION ANSWERING SETUP ###
-def answer_question_old(question: str):
-    
-    def format_docs(docs):
-        return "\n\n".join(
-            f"[Source: {doc.metadata.get('source')}]\n{doc.page_content}"
-            for doc in docs        )
-
-    retriever = vectorstore.as_retriever(
-        search_type="similarity",
-        search_kwargs={"k": 5}    )
-
-    prompt = ChatPromptTemplate.from_messages([
-        (
-            "system",
-            "You are a helpful assistant. Answer the user's question using ONLY the context provided. If the answer is not in the context, say 'I don't know.'"
-        ),
-        (
-            "human",
-            """Context:{context} Question:{question}""")])
-    # 1. Retrieve
-    docs = retriever._get_relevant_documents(question, run_manager=None)
-
-    # 2. Format context
-    context = format_docs(docs)
-
-    # 3. Build prompt
-    messages = prompt.format_messages(
-        context=context,
-        question=question
-    )
-
-    # 4. Call LLM
-    response = llm(messages)
-    return response.content
-
 
 if __name__ == '__main__':
     app.run(debug=True)
