@@ -146,8 +146,10 @@ def reports_handler():
 
 def collect_reports(mode: str, ticker: str = None, translate: bool = False, job_id: str = None) -> None:
     """Extract recent EDINET filings for companies in our Google Sheet list."""
-    JOB_STATUS[job_id]["status"] = "running"
-    JOB_STATUS[job_id]["progress"] = 0
+    JOB_STATUS[job_id] = {
+        "status": "running",
+        "progress": 0
+    }
 
     # Core URLs
     portfolio_url = "https://docs.google.com/spreadsheets/d/1oiqGL-ijryNwwpIFhwkimNM24plQOqgSJC-36q08MP4"
@@ -255,8 +257,10 @@ def news_handler():
 
 def collect_news(report_feed: str = None, earliest_date = None, translate: bool = False, job_id: str = None) -> None:
     """Collect news from RSS feeds and save to a text file."""
-    JOB_STATUS[job_id]["status"] = "running"
-    JOB_STATUS[job_id]["progress"] = 0
+    JOB_STATUS[job_id] = {
+        "status": "running",
+        "progress": 0
+    }
 
     macro_english = {
         "Yomiuri_Business": "https://japannews.yomiuri.co.jp/business/feed/",

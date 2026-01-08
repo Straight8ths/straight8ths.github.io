@@ -261,6 +261,7 @@ async function pollJobStatus(jobId, interval = 2000) {
         const data = await res.json();
 
         addLog(`[${jobId}] status: ${data.status}`);
+        addLog(`[${jobId}] errors: ${data.error || 'None'}`);
 
         if (data.status === "complete") {
           clearInterval(timer);
