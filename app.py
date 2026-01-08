@@ -29,7 +29,7 @@ from flask import Flask, jsonify, request, render_template
 from flask_cors import CORS
 import pdfplumber
 import pickle
-from threading import Thread
+from threading import Thread, Lock
 import uuid
 from werkzeug.utils import secure_filename
 
@@ -56,7 +56,9 @@ for path in DOCUMENT_BUCKETS.values():
     path.mkdir(parents=True, exist_ok=True)
 
 ### DOCUMENT INGESTION FUNCTIONS ###
+jobs_lock = Lock()
 JOB_STATUS = {}
+
 
 ALLOWED_EXTENSIONS = {".pdf", ".txt"}
 
@@ -496,15 +498,24 @@ def allowed_file(filename: str) -> bool:
 
 @app.route("/job/<job_id>")
 def job_status(job_id):
-    job = JOB_STATUS.get(job_id)
+    try:
+        with jobs_lock:
+            job = JOB_STATUS.get(job_id)
 
-    if not job:
+        if not job:
+            return jsonify({
+                "status": "unknown",
+                "error": "Job not found"
+            }), 404
+
+        return jsonify(job)
+
+    except Exception as e:
+        # This is critical — NEVER let this route throw
         return jsonify({
-            "status": "unknown",
-            "error": "Job not found"
-        }), 404
-
-    return jsonify(job)
+            "status": "error",
+            "error": str(e)
+        }), 500
 
 def get_vector_count(index) -> int:
     stats = index.describe_index_stats()
@@ -561,7 +572,8 @@ def ingest_many_documents(paths: list[Path], job_id: str, bucket: str):
                 print(f"[{job_id}] START {path.name}")
                 ingest_single_document(path, job_id, bucket)
                 print(f"[{job_id}] DONE {path.name}")
-                JOB_STATUS[job_id]["processed"] += 1
+                with jobs_lock:
+                    JOB_STATUS[job_id]["processed"] += 1
             except Exception as e:
                 print(f"[{job_id}] failed {path.name}: {e}")
 
@@ -576,10 +588,11 @@ def ingest_many_documents(paths: list[Path], job_id: str, bucket: str):
 
 def ingest_many_documents_safe(items, job_id, bucket):
     try:
-        JOB_STATUS[job_id]["status"] = "running"
-        JOB_STATUS[job_id]["processed"] = 0
-        JOB_STATUS[job_id]["vectors_added"] = 0
-        JOB_STATUS[job_id]["error"] = None
+        with jobs_lock:
+            JOB_STATUS[job_id]["status"] = "running"
+            JOB_STATUS[job_id]["processed"] = 0
+            JOB_STATUS[job_id]["vectors_added"] = 0
+            JOB_STATUS[job_id]["error"] = None
 
         saved_paths = []
 
