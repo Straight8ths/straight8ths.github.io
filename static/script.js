@@ -249,7 +249,7 @@ async function handleFileUpload(event) {
 }
 
 // Only run if there is an active job
-async function pollJobStatus(jobId, interval = 2000) {
+async function pollJobStatus(jobId, interval = 8000) {
     if (!jobId) {
         addLog("No active job to poll.");
         return;

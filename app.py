@@ -530,6 +530,7 @@ def load_text_file_safe(path: Path) -> str:
             for i, page in enumerate(pdf.pages):
                 try:
                     text = page.extract_text()
+                    time.sleep(0.1)  # Be gentle on large PDFs
                     if text:
                         chunks.append(text)
                 except Exception:
