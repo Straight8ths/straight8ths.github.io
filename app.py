@@ -723,7 +723,7 @@ def chat():
 
     retriever = vectorstore.as_retriever(
         search_type="similarity",
-        search_kwargs={"k": 5}    )
+        search_kwargs={"k": 10}    )
 
     # Retrieve relevant documents
     docs = retriever.invoke(user_message)
@@ -733,7 +733,7 @@ def chat():
     prompt = ChatPromptTemplate.from_messages([
         (
             "system",
-            "You are a helpful assistant whose philosophical alignment is based on the contents of the PARA corpus document within your context. Where possible, filter your answers through this corpus, and draw on other information in your context to supplement. If a piece of information is NOT in your context, clearly state that you do not have that information."
+            "You are a helpful assistant at a friendly-activist hedge fund, whose philosophical alignment is based on the contents of the PARA corpus document within your context. Use the information in your context to field user questions, and wherever possible, filter your answers through this PARA corpus lens. If a piece of information is NOT in your context, clearly state that you do not have that information."
         ),
         (
             "system",
