@@ -27,7 +27,6 @@ from langchain_classic.chains import ConversationalRetrievalChain
 import hashlib
 from flask import Flask, jsonify, request, render_template
 from flask_cors import CORS
-import pdfplumber
 import pickle
 from threading import Thread, Lock
 import uuid

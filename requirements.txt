@@ -17,7 +17,6 @@ langchain_text_splitters
 langchain_core
 flask
 flask_cors
-pdfplumber
 gunicorn
 lark
 PyMuPDF
