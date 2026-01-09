@@ -459,36 +459,64 @@ def collect_news(report_feed: str = None, earliest_date = None, translate: bool 
 
 
     # Download RSS feeds and write to file
-    with open(os.path.expanduser(filepath), "w") as file:
-        for i in report_feed:
-                for name, url in i.items():
-                    feed = feedparser.parse(url)
-                    file.write(f"Feed: {name.upper()}\n\n")
-                    for entry in feed.entries:
-                        formatted_time = None
-                        if 'published' in entry and entry.published:
-                            formatted_time = time.strftime('%Y-%m-%d', entry.published_parsed)
-                        if 'updated' in entry and entry.updated:
-                            formatted_time = time.strftime('%Y-%m-%d', entry.updated_parsed)
-                        if formatted_time and (formatted_time >= earliest_date):
-                            file.write(f"Published: {formatted_time}\n")
-                            if 'title' in entry and entry.title:
-                                if i == report_feed[1] and translate is True: # Japanese feeds
-                                    title = deepl_client.translate_text(entry.title, target_lang="EN-US").text
-                                    file.write(f"Title: {title}\n")
-                                else:
-                                    file.write(f"Title: {entry.title}\n")
-                            if 'summary' in entry and entry.summary:
-                                if i == report_feed[1] and translate is True: # Japanese feeds
-                                    summary = deepl_client.translate_text(entry.summary, target_lang="EN-US").text
-                                    file.write(f"Summary: {summary}\n")
-                                else:
-                                    file.write(f"Summary: {entry.summary}\n")
-                            if 'link' in entry and entry.link:
-                                file.write(f"Link: {entry.link}\n")
-                            file.write("\n")
-                    file.write("====================================\n\n")
-                    JOB_STATUS[job_id]["progress"] += 1
+    with open(os.path.expanduser(filepath), "w", encoding="utf-8") as file:
+        for feed_group in report_feed:
+            for name, url in feed_group.items():
+                feed = feedparser.parse(url)
+                file.write(f"Feed: {name.upper()}\n\n")
+
+                for entry in feed.entries:
+                    formatted_time = None
+
+                    if getattr(entry, "published_parsed", None):
+                        formatted_time = time.strftime(
+                            "%Y-%m-%d", entry.published_parsed
+                        )
+                    elif getattr(entry, "updated_parsed", None):
+                        formatted_time = time.strftime(
+                            "%Y-%m-%d", entry.updated_parsed
+                        )
+
+                    if not formatted_time or formatted_time < earliest_date:
+                        continue
+
+                    file.write(f"Published: {formatted_time}\n")
+
+                    # Title
+                    if getattr(entry, "title", None):
+                        title = entry.title
+                        if feed_group is report_feed[1] and translate == True:
+                            title = deepl_client.translate_text(
+                                title, target_lang="EN-US"
+                            ).text
+                        file.write(f"Title: {title}\n")
+                        del title
+
+                    # Summary
+                    if getattr(entry, "summary", None):
+                        summary = entry.summary
+                        if feed_group is report_feed[1] and translate == True:
+                            summary = deepl_client.translate_text(
+                                summary, target_lang="EN-US"
+                            ).text
+                        file.write(f"Summary: {summary}\n")
+                        del summary
+
+                    # Link
+                    if getattr(entry, "link", None):
+                        file.write(f"Link: {entry.link}\n")
+
+                    file.write("\n")
+
+                    # Explicitly drop entry reference
+                    del entry
+
+                file.write("====================================\n\n")
+
+                # Explicit cleanup per feed
+                del feed
+                file.flush()
+            JOB_STATUS[job_id]["progress"] += 1
     JOB_STATUS[job_id]["status"] = "complete"
     return
 
