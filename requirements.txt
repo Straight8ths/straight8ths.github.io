@@ -20,3 +20,4 @@ flask_cors
 gunicorn
 lark
 PyMuPDF
+psutil
