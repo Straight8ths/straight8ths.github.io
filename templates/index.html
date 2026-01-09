@@ -48,7 +48,7 @@
         .controls-section {
             display: flex;
             gap: 30px;
-            margin-bottom: 20px;
+            margin-bottom: 0px;
             border-bottom: 2px solid #1e3a5f;
             flex-wrap: wrap;
         }
@@ -165,7 +165,7 @@
         }
 
         .logs-section {
-            width: 70vw;
+            width: 35vw;
             scrollbar-width: thin;
             scrollbar-color: #1c2d44 #0a1628;
         }
@@ -196,8 +196,8 @@
 </head>
 <body>
     <div class = "page">
-    <div class="layout" style="margin-bottom: 80px;">
-    <div style="margin-bottom: 20px;" class="controls">
+    <div class="layout" style="margin-bottom: 0px;">
+    <div style="margin-bottom: 0px;" class="controls">
         <h1 style="margin-bottom: 10px; color: #1e3a5f; text-shadow: 2px 2px 1px #000000;">Information Gathering Tools</h1>
         <hr style="border: 1px solid #1e3a5f; margin-bottom: 20px;">
             <div class="container" style="margin-bottom: 20px;">
@@ -273,17 +273,6 @@
                             <input type="file" style="color: #e8f1fa;" id="uploadInput" onchange="handleFileUpload(event)">
                         </div>
                     </div>
-
-            
-            <div class="container" style="margin-bottom: 20px;">
-                <button class="button" style="--btn-bg: #008d28; margin-right: 8px; color: #ffffff" onclick="checkVectorDBStatus()">Check VectorDB Status</button>
-                <button
-                    id="clearVectorDBBtn"
-                    onclick="confirmClearVectorDB()"
-                    class="button" style="--btn-bg: #930000; color: #ffffff;"
-                >Clear Vector Database
-                </button>
-            </div>
     </div>
     <div style="margin-bottom: 20px;" class="chat">
         <div class="chat-section">
@@ -300,10 +289,25 @@
 </div>
 
 <div class="page">
+    <div class = "layout">
+    <div class="logs-section" style="margin-bottom: 20px;">
+        <h1 style="margin-bottom: 10px; color: #1e3a5f; text-shadow: 2px 2px 1px #000000;">Utilities</h1>
+        <hr style="border: 1px solid #1e3a5f; margin-bottom: 20px;">
+        <button class="button" style="--btn-bg: #b7009f; margin-right: 8px; color: #ffffff" onclick="fetchMemoryUsage()">Check memory usage</button>
+        <button class="button" style="--btn-bg: #008d28; margin-right: 8px; color: #ffffff" onclick="checkVectorDBStatus()">Check VectorDB Status</button>
+        <button
+            id="clearVectorDBBtn"
+            onclick="confirmClearVectorDB()"
+            class="button" style="--btn-bg: #930000; color: #ffffff;"
+        >Clear Vector Database
+        </button>
+    </div>
+
     <div style="margin-bottom: 20px" class="logs-section">
         <h1 style="margin-bottom: 10px; color: #1e3a5f; text-shadow: 2px 2px 1px #000000;">System Logs</h1>
         <hr style="border: 1px solid #1e3a5f; margin-bottom: 20px;">
         <div class="logs-box" id="logsBox"></div>
+    </div>
     </div>
 </div>
     <script src="/static/script.js"></script>

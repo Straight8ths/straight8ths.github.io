@@ -32,6 +32,7 @@ from threading import Thread, Lock
 import uuid
 from werkzeug.utils import secure_filename
 import pymupdf
+import psutil
 
 app = Flask(__name__)
 CORS(app)
@@ -39,6 +40,10 @@ CORS(app)
 @app.route('/', methods=['GET'])
 def home():
     return render_template('index.html')
+
+def mem_mb():
+    process = psutil.Process(os.getpid())
+    return process.memory_info().rss / 1024 / 1024
 
 ### DIRECTORIES SETUP ###
 # Define base directory
@@ -148,6 +153,7 @@ def reports_handler():
 
 def collect_reports(mode: str, ticker: str = None, translate: bool = False, job_id: str = None) -> None:
     """Extract recent EDINET filings for companies in our Google Sheet list."""
+    print(f"[MEM USAGE] Before reports aggregation: {mem_mb():.1f} MB")
     JOB_STATUS[job_id] = {
         "status": "running",
         "progress": 0
@@ -235,14 +241,17 @@ def collect_reports(mode: str, ticker: str = None, translate: bool = False, job_
                     f.write(f"{str(title)}\n")
                     f.write(f"{str(content)}\n")
                     f.write("\n")
+                    del title, content
             JOB_STATUS[job_id]["progress"] += 1
         except Exception as e:
             error_reports.append(docID)
     JOB_STATUS[job_id]["status"] = "complete"
+    print(f"[MEM USAGE] After reports aggregation: {mem_mb():.1f} MB")
     return
     
 @app.route('/news_handler', methods=['POST'])
 def news_handler():
+    
     report_feed = request.form.get("report_feed", "macro_feeds")
     earliest_date = request.form.get("earliest_date", "2023-01-01")
     translate = request.form.get("translate", False)
@@ -259,6 +268,7 @@ def news_handler():
 
 def collect_news(report_feed: str = None, earliest_date = None, translate: bool = False, job_id: str = None) -> None:
     """Collect news from RSS feeds and save to a text file."""
+    print(f"[MEM USAGE] Before news aggregation: {mem_mb():.1f} MB")
     JOB_STATUS[job_id] = {
         "status": "running",
         "progress": 0
@@ -463,6 +473,8 @@ def collect_news(report_feed: str = None, earliest_date = None, translate: bool 
         for feed_group in report_feed:
             for name, url in feed_group.items():
                 feed = feedparser.parse(url)
+                if len(feed.entries) == 0:
+                    continue
                 file.write(f"Feed: {name.upper()}\n\n")
 
                 for entry in feed.entries:
@@ -517,7 +529,11 @@ def collect_news(report_feed: str = None, earliest_date = None, translate: bool 
                 del feed
                 file.flush()
             JOB_STATUS[job_id]["progress"] += 1
+    # Delete the file if no content was written
+    if os.path.getsize(filepath) == 0:
+        os.remove(filepath)
     JOB_STATUS[job_id]["status"] = "complete"
+    print(f"[MEM USAGE] After news aggregation: {mem_mb():.1f} MB")
     return
 
 def allowed_file(filename: str) -> bool:
@@ -545,11 +561,30 @@ def job_status(job_id):
             "error": str(e)
         }), 500
 
+@app.route("/directory_check", methods=["POST"])
+def directory_check():
+    """Ensure that the given directory has at least one file."""
+    bucket = request.form.get("bucket")
+    dir_path = DOCUMENT_BUCKETS[bucket]
+
+    if not any(dir_path.iterdir()):
+        return jsonify({"error": "No files found in directory"})
+    else:
+        return jsonify({"status": "Directory has files"})
+
 def get_vector_count(index) -> int:
     stats = index.describe_index_stats()
     return stats.get("total_vector_count", 0)
 
+@app.route("/memory_usage", methods=["GET"])
+def memory_usage():
+    usage_mb = mem_mb()
+    return jsonify({
+        "memory_usage": usage_mb
+    })
+
 def load_text_file_safe(path: Path) -> str:
+    print(f"[MEM USAGE] Before reading file: {mem_mb():.1f} MB")
     if path.suffix.lower() == ".pdf":
         chunks = []
 
@@ -561,11 +596,13 @@ def load_text_file_safe(path: Path) -> str:
                     time.sleep(0)  # Be gentle on large PDFs
                     if text:
                         chunks.append(text)
+                        del text
                 except Exception:
                     print(f"PDF page {page_num} failed")
-
+        print(f"[MEM USAGE] After reading file: {mem_mb():.1f} MB")
         return "\n".join(chunks)
-
+    
+    print(f"[MEM USAGE] After reading file: {mem_mb():.1f} MB")
     return path.read_text(encoding="utf-8", errors="ignore")
 
 def ingest_single_document(path: Path, job_id: str, bucket: str):
@@ -691,6 +728,8 @@ def upload():
             p for p in DOCUMENT_BUCKETS[bucket].iterdir()
             if p.is_file() and p.suffix.lower() in {".pdf", ".txt"}
         ]
+        if not paths:
+            return jsonify({"error": "No files found in directory"}), 400
 
     else:
         return jsonify({"error": "Invalid mode"}), 400
@@ -755,13 +794,13 @@ def chat():
 
     # Retrieve relevant documents
     docs = retriever.invoke(user_message)
-    context = "\n\n".join(f"[Source: {doc.metadata.get('source', 'unknown')}]\n{doc.page_content}" for doc in docs)
+    context = "\n\n".join(f"[Source: {doc.metadata.get('source', 'unknown')}]\n[Content: {doc.page_content}]" for doc in docs)
 
     # Build prompt
     prompt = ChatPromptTemplate.from_messages([
         (
             "system",
-            "You are a helpful assistant at a friendly-activist hedge fund, whose philosophical alignment is based on the contents of the PARA corpus document within your context. Use the information in your context to field user questions, and always filter your answers through the PARA corpus as a lens. If a piece of information is NOT in your context, clearly state that you do not have that information."
+            "You are a helpful assistant at a friendly-activist hedge fund, whose philosophical alignment is based on the proprietary 'PARA corpus' document within your context. Search your context for elements of the PARA corpus that relate to the user's question in addition to searching any other information you are asked, and wherever possible, tie them together. If a piece of information is NOT in your context, clearly state that you do not have that information."
         ),
         (
             "system",

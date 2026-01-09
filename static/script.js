@@ -30,6 +30,17 @@ function addLog(message) {
     logsBox.scrollTop = logsBox.scrollHeight;
 }
 
+async function fetchMemoryUsage() {
+    try {
+        const response = await fetch("/memory_usage", { method: "GET" });
+        const data = await response.json();
+        addLog(`Current memory usage: ${data.memory_usage.toFixed(2)} MB`);
+    } catch (error) {
+        addLog(`ERROR: Failed to fetch memory usage - ${error}`);
+    }
+}
+
+
 
 async function newsHandler(){
   try {
@@ -205,6 +216,24 @@ async function uploadFile(file, bucket) {
 }
 
 async function ingestDirectory(bucket) {
+  const directoryCheck = new FormData();
+  directoryCheck.append("bucket", bucket);
+
+  // First check if directory has files 
+  await fetch("/directory_check", {
+      method: "POST",
+      body: directoryCheck
+    })
+    .then(res => res.json())
+    // If JSON contains "error", add a log and return
+    .then(data => {
+      if (data.error) {
+        addLog(`Error: ${data.error}`);
+        throw new Error(data.error);
+      }
+    });
+
+  // Proceed with ingestion if no error
   const formData = new FormData();
   formData.append("bucket", bucket);
   formData.append("mode", "directory");
