@@ -475,7 +475,6 @@ def collect_news(report_feed: str = None, earliest_date = None, translate: bool 
                 feed = feedparser.parse(url)
                 if len(feed.entries) == 0:
                     continue
-                file.write(f"Feed: {name.upper()}\n\n")
 
                 for entry in feed.entries:
                     formatted_time = None
@@ -489,10 +488,16 @@ def collect_news(report_feed: str = None, earliest_date = None, translate: bool 
                             "%Y-%m-%d", entry.updated_parsed
                         )
 
-                    if not formatted_time or formatted_time < earliest_date:
+                    if earliest_date and (not formatted_time or formatted_time < earliest_date):
+                        del entry
                         continue
 
-                    file.write(f"Published: {formatted_time}\n")
+                    if formatted_time is None:
+                        formatted_time = "Date not given"
+
+                    file.write(f"News Source: {name.upper()}\n")
+
+                    file.write(f"Published Date: {formatted_time}\n")
 
                     # Title
                     if getattr(entry, "title", None):
@@ -501,7 +506,7 @@ def collect_news(report_feed: str = None, earliest_date = None, translate: bool 
                             title = deepl_client.translate_text(
                                 title, target_lang="EN-US"
                             ).text
-                        file.write(f"Title: {title}\n")
+                        file.write(f"Headline: {title}\n")
                         del title
 
                     # Summary
@@ -511,19 +516,17 @@ def collect_news(report_feed: str = None, earliest_date = None, translate: bool 
                             summary = deepl_client.translate_text(
                                 summary, target_lang="EN-US"
                             ).text
-                        file.write(f"Summary: {summary}\n")
+                        file.write(f"Article Summary: {summary}\n")
                         del summary
 
                     # Link
                     if getattr(entry, "link", None):
-                        file.write(f"Link: {entry.link}\n")
+                        file.write(f"Article link: {entry.link}\n")
 
                     file.write("\n")
 
                     # Explicitly drop entry reference
                     del entry
-
-                file.write("====================================\n\n")
 
                 # Explicit cleanup per feed
                 del feed
